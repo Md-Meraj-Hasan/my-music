@@ -20,7 +20,7 @@ import com.getcapacitor.annotation.PermissionCallback
 @CapacitorPlugin(
     name = "MediaPermission",
     permissions = [
-        Permission(strings = [Manifest.permission.READ_MEDIA_AUDIO], alias = "media13"),
+        Permission(strings = [Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.READ_MEDIA_VIDEO], alias = "media13"),
         Permission(strings = [Manifest.permission.READ_EXTERNAL_STORAGE], alias = "mediaLegacy")
     ]
 )

@@ -1,15 +1,10 @@
-# Meraj Music — Offline Local Player
+# Meraj Video — Offline Android Video Player
 
-Google Music-inspired multi-page local audio player. Audio-only; no video player and no network permission.
+A video-only version of the local media player, using HTML/CSS/JavaScript, Capacitor, and the included Android MediaStore scanner. The app opens the video library on startup and requests media permission, then lists videos stored on the device.
 
-## Browser preview
-Run `npm install` and `npm run start` for the browser preview. Browser security requires selecting local files/folders with the Scan Music button.
+- Local device videos only; no streaming features.
+- Dark premium UI with purple/blue accents.
+- Video playback, playlist navigation, repeat/shuffle, playback speed, fit/fullscreen and lock controls inherited from the source project.
+- Android APK build workflow: `.github/workflows/build-apk.yml`.
 
-## Android behavior
-On startup the app requests Android audio-library permission once (unless already granted), then queries Android MediaStore for audio tracks and folder paths. The Scan Music button rescans the library. The browser and Android use the same multi-page interface.
-
-## Build
-GitHub Actions builds the debug APK. The native plugins are integrated by `scripts/integrate-native-media.cjs`.
-
-## Notes
-Playback of MediaStore content URIs and permission behavior should be tested on a physical Android device across the supported Android versions.
+Builds and device playback must be verified with GitHub Actions and a real Android device. Codec support depends on Android/device codecs.

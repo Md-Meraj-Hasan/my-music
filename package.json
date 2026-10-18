@@ -2,7 +2,7 @@
   "name": "meraj-media-player",
   "version": "1.0.0",
   "private": true,
-  "description": "Offline-first local audio player for Android",
+  "description": "Offline-first local audio and video player for Android",
   "scripts": {
     "start": "vite --host 0.0.0.0",
     "build": "vite build",

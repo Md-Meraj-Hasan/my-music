@@ -43,11 +43,11 @@ if (mainActivity) {
   const dir = path.join(javaRoot, ...packageName.split('.'));
   fs.mkdirSync(dir, { recursive: true });
   mainActivity = path.join(dir, 'MainActivity.kt');
-  fs.writeFileSync(mainActivity, `package ${packageName}\n\nimport android.os.Bundle\nimport com.getcapacitor.BridgeActivity\n\nclass MainActivity : BridgeActivity() {\n    override fun onCreate(savedInstanceState: Bundle?) {\n        registerPlugin(MediaPermissionPlugin::class.java)\n        registerPlugin(MediaLibraryScannerPlugin::class.java)\n        registerPlugin(MerajMediaPlayerPlugin::class.java)\n        super.onCreate(savedInstanceState)\n    }\n}\n`);
+  fs.writeFileSync(mainActivity, `package ${packageName}\n\nimport android.os.Bundle\nimport com.getcapacitor.BridgeActivity\n\nclass MainActivity : BridgeActivity() {\n    override fun onCreate(savedInstanceState: Bundle?) {\n        registerPlugin(MediaPermissionPlugin::class.java)\n        registerPlugin(MediaLibraryScannerPlugin::class.java)\n        super.onCreate(savedInstanceState)\n    }\n}\n`);
 }
 
 const activityDir = path.dirname(mainActivity);
-for (const name of ['MediaPermissionPlugin.kt', 'MediaLibraryScannerPlugin.kt', 'MerajMediaPlayerPlugin.kt']) {
+for (const name of ['MediaPermissionPlugin.kt', 'MediaLibraryScannerPlugin.kt']) {
   const source = path.join(nativeRoot, name);
   if (!fs.existsSync(source)) throw new Error(`Required native plugin source missing: ${source}`);
   let code = fs.readFileSync(source, 'utf8');
@@ -62,9 +62,9 @@ if (!main.includes('MediaPermissionPlugin::class.java') && !main.includes('Media
     const onCreate = /override\s+fun\s+onCreate\s*\(\s*savedInstanceState\s*:\s*Bundle\?\s*\)\s*\{/.exec(main);
     if (onCreate) {
       const insertAt = onCreate.index + onCreate[0].length;
-      main = main.slice(0, insertAt) + '\n        registerPlugin(MediaPermissionPlugin::class.java)\n        registerPlugin(MediaLibraryScannerPlugin::class.java)\n        registerPlugin(MerajMediaPlayerPlugin::class.java)' + main.slice(insertAt);
+      main = main.slice(0, insertAt) + '\n        registerPlugin(MediaPermissionPlugin::class.java)\n        registerPlugin(MediaLibraryScannerPlugin::class.java)' + main.slice(insertAt);
     } else {
-      main = main.replace(/class\s+MainActivity\s*:\s*BridgeActivity\(\)\s*\{?\s*\}?\s*$/, `class MainActivity : BridgeActivity() {\n    override fun onCreate(savedInstanceState: Bundle?) {\n        registerPlugin(MediaPermissionPlugin::class.java)\n        registerPlugin(MediaLibraryScannerPlugin::class.java)\n        registerPlugin(MerajMediaPlayerPlugin::class.java)\n        super.onCreate(savedInstanceState)\n    }\n}`);
+      main = main.replace(/class\s+MainActivity\s*:\s*BridgeActivity\(\)\s*\{?\s*\}?\s*$/, `class MainActivity : BridgeActivity() {\n    override fun onCreate(savedInstanceState: Bundle?) {\n        registerPlugin(MediaPermissionPlugin::class.java)\n        registerPlugin(MediaLibraryScannerPlugin::class.java)\n        super.onCreate(savedInstanceState)\n    }\n}`);
     }
   } else {
     // Capacitor's default Java MainActivity is often an empty class with no
@@ -72,7 +72,7 @@ if (!main.includes('MediaPermissionPlugin::class.java') && !main.includes('Media
     const onCreate = /(?:@Override\s*)?protected\s+void\s+onCreate\s*\(\s*Bundle\s+savedInstanceState\s*\)\s*\{/.exec(main);
     if (onCreate) {
       const insertAt = onCreate.index + onCreate[0].length;
-      main = main.slice(0, insertAt) + '\n        registerPlugin(MediaPermissionPlugin.class);\n        registerPlugin(MediaLibraryScannerPlugin.class);\n        registerPlugin(MerajMediaPlayerPlugin.class);' + main.slice(insertAt);
+      main = main.slice(0, insertAt) + '\n        registerPlugin(MediaPermissionPlugin.class);\n        registerPlugin(MediaLibraryScannerPlugin.class);' + main.slice(insertAt);
     } else {
       if (!/import\s+android\.os\.Bundle\s*;/.test(main)) {
         const packageMatch = /package\s+[A-Za-z0-9_.]+\s*;/.exec(main);
@@ -86,21 +86,24 @@ if (!main.includes('MediaPermissionPlugin::class.java') && !main.includes('Media
       const classOpen = /class\s+MainActivity\s+extends\s+BridgeActivity\s*\{/.exec(main);
       if (!classOpen) throw new Error(`Could not find MainActivity extends BridgeActivity class in ${mainActivity}`);
       const insertAt = classOpen.index + classOpen[0].length;
-      main = main.slice(0, insertAt) + `\n    @Override\n    protected void onCreate(Bundle savedInstanceState) {\n        registerPlugin(MediaPermissionPlugin.class);\n        registerPlugin(MediaLibraryScannerPlugin.class);\n        registerPlugin(MerajMediaPlayerPlugin.class);\n        super.onCreate(savedInstanceState);\n    }\n` + main.slice(insertAt);
+      main = main.slice(0, insertAt) + `\n    @Override\n    protected void onCreate(Bundle savedInstanceState) {\n        registerPlugin(MediaPermissionPlugin.class);\n        registerPlugin(MediaLibraryScannerPlugin.class);\n        super.onCreate(savedInstanceState);\n    }\n` + main.slice(insertAt);
     }
   }
 }
 if (!main.includes('MediaLibraryScannerPlugin::class.java') && !main.includes('MediaLibraryScannerPlugin.class')) {
-  throw new Error(`Could not register native media scanner in ${mainActivity}`);
+  throw new Error(`Could not register native media plugins in ${mainActivity}`);
 }
-if (!main.includes('MerajMediaPlayerPlugin::class.java') && !main.includes('MerajMediaPlayerPlugin.class')) {
-  main = main.replace(/registerPlugin\(MediaLibraryScannerPlugin(::class\.java|\.class)\);?/, match => match + (match.includes('::class') ? '\n        registerPlugin(MerajMediaPlayerPlugin::class.java)' : '\n        registerPlugin(MerajMediaPlayerPlugin.class);'));
+// WebView must allow playback after the async native MediaStore preparation step.
+if (mainActivity.endsWith('.kt') && !main.includes('mediaPlaybackRequiresUserGesture = false')) {
+  main = main.replace(/super\.onCreate\(savedInstanceState\)/, 'super.onCreate(savedInstanceState)\n        bridge.webView.settings.mediaPlaybackRequiresUserGesture = false');
 }
+
 fs.writeFileSync(mainActivity, main);
 
 let xml = fs.readFileSync(manifest, 'utf8');
 const permissions = [
   '<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />',
+  '<uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />',
   '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />'
 ];
 const missing = permissions.filter(p => !xml.includes(p));
@@ -133,12 +136,4 @@ function ensureKotlinGradlePlugin() {
 
 ensureKotlinGradlePlugin();
 
-const appGradle = path.join(appRoot, 'build.gradle');
-let gradleText = fs.readFileSync(appGradle, 'utf8');
-if (!gradleText.includes('androidx.media3:media3-exoplayer')) {
-  if (!/dependencies\s*\{/.test(gradleText)) throw new Error('Could not find dependencies block in android/app/build.gradle');
-  gradleText = gradleText.replace(/dependencies\s*\{/, match => `${match}\n    implementation 'androidx.media3:media3-exoplayer:1.5.1'`);
-  fs.writeFileSync(appGradle, gradleText);
-}
-
-console.log(`Native media plugins copied and registered in ${mainActivity}; media permissions and ExoPlayer dependency configured.`);
+console.log(`Native media plugins copied and registered in ${mainActivity}; media permissions declared.`);
