@@ -1,0 +1,8 @@
+{
+  "appId": "com.meraj.mediaplayer",
+  "appName": "Professional Local Media Player",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  }
+}
