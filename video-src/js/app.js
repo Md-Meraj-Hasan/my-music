@@ -35,7 +35,8 @@
   const VideoScannerBridge = {
     scan: payload => callParentNative('scan', payload),
     preparePlayback: payload => callParentNative('preparePlayback', payload),
-    getThumbnail: payload => callParentNative('getThumbnail', payload)
+    getThumbnail: payload => callParentNative('getThumbnail', payload),
+    shareMedia: payload => callParentNative('shareMedia', payload)
   };
 
   const welcome = $("welcome-screen"), playerScreen = $("player-screen");
@@ -359,7 +360,7 @@
     ensureGainGraph("video"); if (state.videoGainNode) state.videoGainNode.gain.value = state.videoBoost;
     $("current-name").textContent = file.name;
     $("current-type").textContent = `VIDEO FILE · ${formatBytes(file.size)}`;
-    $("media-stage").classList.remove("hidden"); $("empty-library").classList.add("hidden");
+    $("media-stage").classList.remove("hidden"); $("media-stage").classList.remove("video-stage-collapsed"); $("empty-library").classList.add("hidden");
     document.body.classList.add("video-playing");
     $("artwork").classList.add("hidden"); $("audio-controls").classList.add("hidden");
     video.classList.remove("hidden"); $("video-status").classList.remove("hidden");
@@ -718,15 +719,33 @@
   $("bottom-rescan").addEventListener("click", () => { document.body.classList.remove("video-playing"); scanDeviceLibrary(); });
   const shareVideoAppButton = $("share-video-app");
   if (shareVideoAppButton) {
+    shareVideoAppButton.setAttribute("aria-label", "Share selected video");
+    shareVideoAppButton.setAttribute("title", "Share selected video");
     shareVideoAppButton.addEventListener("click", async () => {
-      const payload = { title: "Meraj Media", text: "Try Meraj Media — an offline audio and video player. Your media stays on your device." };
+      const file = state.files[state.index];
+      if (!file) { updateScanMessage("Select a video first, then tap Share."); return; }
       try {
-        if (navigator.share) { await navigator.share(payload); return; }
-        if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(payload.text); alert("Share text copied."); return; }
-        alert(payload.text);
-      } catch (error) { if (error && error.name !== "AbortError") alert("Sharing is not available on this device."); }
+        if (file.uri) {
+          await VideoScannerBridge.shareMedia({ uri: file.uri, name: file.name || "video", mimeType: file.mimeType || "video/*" });
+        } else if (file instanceof File && navigator.share && navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: file.name });
+        } else {
+          updateScanMessage("Sharing this video is available in the Android app after scanning your device library.");
+        }
+      } catch (error) { if (error?.name !== "AbortError") { console.error("Video share failed", error); updateScanMessage("Could not share this video. Please try again."); } }
     });
   }
+  const collapseVideoStageButton = $("collapse-video-stage");
+  collapseVideoStageButton?.addEventListener("click", (event) => {
+    event.preventDefault(); event.stopPropagation();
+    try { video.pause(); } catch (_) {}
+    if (state.controlsTimer) { clearTimeout(state.controlsTimer); state.controlsTimer = null; }
+    $("video-overlay-controls")?.classList.add("hidden");
+    $("video-speed-menu")?.classList.add("hidden");
+    $("media-stage")?.classList.add("video-stage-collapsed");
+    // Keep the current selection and playback position; tapping a video card restores the stage.
+    document.body.classList.remove("video-playing");
+  });
   $("rescan-library-top").addEventListener("click", scanDeviceLibrary);
   $("choose-video").addEventListener("click", () => { openMode("video"); scanDeviceLibrary(); });
   $("back-home")?.addEventListener("click", () => {

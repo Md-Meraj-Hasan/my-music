@@ -13,3 +13,8 @@
 - JavaScript syntax and JSON syntax checked.
 - ZIP integrity checked.
 - APK compilation and physical-device playback/rotation not run in this environment.
+
+
+## Latest UX updates
+- Added a compact close/collapse chevron on the video frame; it pauses the video and hides the stage so the list can use the available screen. Selecting a video restores the stage.
+- Audio and video Share buttons now share the selected media file, not promotional text. Android uses MediaStore content URIs with ACTION_SEND, a chooser, and temporary read permission. Browser preview supports Web Share Files only where the browser permits it.

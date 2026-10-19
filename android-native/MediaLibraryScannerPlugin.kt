@@ -20,6 +20,31 @@ import com.getcapacitor.annotation.CapacitorPlugin
 /** Queries Android MediaStore for shared audio/video files after runtime permission is granted. */
 @CapacitorPlugin(name = "MediaLibraryScanner")
 class MediaLibraryScannerPlugin : Plugin() {
+    /** Opens Android's native chooser with the selected local audio/video content URI. */
+    @PluginMethod
+    fun shareMedia(call: PluginCall) {
+        val rawUri = call.getString("uri")
+        if (rawUri.isNullOrBlank()) { call.reject("Missing media URI"); return }
+        try {
+            val uri = Uri.parse(rawUri)
+            val mimeType = call.getString("mimeType")?.takeIf { it.contains("/") } ?: "*/*"
+            val name = call.getString("name", "Media file") ?: "Media file"
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                putExtra(android.content.Intent.EXTRA_TITLE, name)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                clipData = android.content.ClipData.newUri(context.contentResolver, name, uri)
+            }
+            val chooser = android.content.Intent.createChooser(intent, "Share media file")
+            chooser.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            activity.runOnUiThread { activity.startActivity(chooser) }
+            call.resolve(JSObject().put("opened", true))
+        } catch (e: Exception) {
+            call.reject("Could not open Android share menu: ${e.message}", e)
+        }
+    }
+
     @PluginMethod
     fun scan(call: PluginCall) {
         val type = call.getString("type", "audio") ?: "audio"

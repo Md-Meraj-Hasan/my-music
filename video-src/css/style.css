@@ -895,3 +895,30 @@ body.folders-view #player-screen .video-library-toolbar .library-tabs { flex:1 1
 .share-icon-action{display:grid;place-items:center}
 .share-icon-action svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .share-icon-action:active{transform:scale(.96);filter:brightness(1.15)}
+
+/* Compact hide-video control: pause the current video and free the full screen for browsing. */
+.collapse-video-stage{position:absolute;top:9px;right:9px;z-index:12;width:38px;height:38px;display:grid;place-items:center;border-radius:12px;border:1px solid #9beee544;background:#071b20e8;color:#9af0e4;box-shadow:0 4px 14px #0006;backdrop-filter:blur(8px);padding:0;cursor:pointer}
+.collapse-video-stage svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.collapse-video-stage:active{transform:scale(.94)}
+#video-frame.hidden .collapse-video-stage{display:none}
+#media-stage.video-stage-collapsed{display:none!important}
+
+
+/* Layout fix: extend the video library section down to the fixed mobile navigation.
+   Remove unused bottom padding/gap while keeping list content clear of the nav. */
+@media (max-width: 900px) {
+  body:not(.portrait-video-mode) #player-screen.player-screen:not(.hidden) {
+    padding-bottom: 0 !important;
+    gap: 0 !important;
+  }
+  body:not(.portrait-video-mode) #player-screen > .playlist-section {
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+  }
+  body:not(.portrait-video-mode) #player-screen #playlist {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom)) !important;
+  }
+  body:not(.portrait-video-mode) #player-screen > .bottom-navigation {
+    margin-top: 0 !important;
+  }
+}

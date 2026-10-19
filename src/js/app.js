@@ -3,21 +3,26 @@ import { App } from '@capacitor/app';
 import { ScreenOrientation } from '@capacitor/screen-orientation';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 
-// Share app information using the native Android share sheet; local media is never uploaded.
+// Share the currently selected audio file via Android's native share sheet.
 async function shareMerajMedia() {
-  const payload = { title: 'Meraj Media', text: 'Try Meraj Media — an offline audio and video player. Your media stays on your device.' };
+  const t = current >= 0 ? tracks[current] : null;
+  if (!t) { toast('Select an audio track first, then tap Share.'); return; }
   try {
-    if (navigator.share) { await navigator.share(payload); return; }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(payload.text);
-      const toast = $('.toast'); if (toast) { toast.textContent = 'Share text copied'; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2200); } else alert('Share text copied.');
+    if (t.native && t.uri) {
+      await VideoScannerBridge.shareMedia({ uri: t.uri, name: t.name || 'audio', mimeType: t.mimeType || 'audio/*' });
       return;
     }
-    alert(payload.text);
-  } catch (error) { if (error && error.name !== 'AbortError') alert('Sharing is not available on this device.'); }
+    if (t.file && navigator.share && navigator.canShare?.({ files: [t.file] })) {
+      await navigator.share({ files: [t.file], title: t.file.name });
+      return;
+    }
+    toast('To share device music, use the Android app after scanning your library.');
+  } catch (error) {
+    if (error?.name !== 'AbortError') { console.error('Audio share failed', error); toast('Could not share this audio file.'); }
+  }
 }
 const shareAppButton = document.getElementById('shareApp');
-if (shareAppButton) shareAppButton.addEventListener('click', shareMerajMedia);
+if (shareAppButton) { shareAppButton.setAttribute('aria-label','Share selected audio'); shareAppButton.setAttribute('title','Share selected audio'); shareAppButton.addEventListener('click', shareMerajMedia); }
 // Video iframe bridge: keep the video UI/CSS isolated while routing native calls through the parent Capacitor bridge.
 const videoFrameBridge = document.getElementById('videoPlayerFrame');
 const VideoPermissionBridge = registerPlugin('MediaPermission');
@@ -34,6 +39,7 @@ window.addEventListener('message', async (event) => {
       case 'scan': reply.result = await VideoScannerBridge.scan({ type: message.payload?.type || 'video' }); break;
       case 'preparePlayback': reply.result = await VideoScannerBridge.preparePlayback(message.payload || {}); break;
       case 'getThumbnail': reply.result = await VideoScannerBridge.getThumbnail(message.payload || {}); break;
+      case 'shareMedia': reply.result = await VideoScannerBridge.shareMedia(message.payload || {}); break;
       case 'orientationLock': await ScreenOrientation.lock({ orientation: message.payload?.orientation || 'landscape' }); reply.result = { locked: true }; break;
       case 'orientationUnlock': await ScreenOrientation.unlock(); reply.result = { locked: false }; break;
       case 'exitApp': await App.exitApp(); reply.result = { exited: true }; break;
