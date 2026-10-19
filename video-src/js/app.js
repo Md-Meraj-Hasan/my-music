@@ -712,9 +712,21 @@
   $("video-search").addEventListener("input", e => { state.videoSearch = e.target.value || ""; renderPlaylist(); });
   $("video-tab-all").addEventListener("click", () => { state.videoLibraryView = "videos"; state.videoSelectedFolder = ""; updateVideoLibraryTabs(); renderPlaylist(); });
   $("video-tab-folders").addEventListener("click", () => { state.videoLibraryView = "folders"; updateVideoLibraryTabs(); renderPlaylist(); });
+  $("bottom-audio-return")?.addEventListener("click", () => { window.parent.postMessage({ type: "meraj-video-switch-audio" }, "*"); });
   $("bottom-library").addEventListener("click", () => { document.body.classList.remove("video-playing"); state.videoLibraryView = "videos"; state.videoSelectedFolder = ""; updateVideoLibraryTabs(); renderPlaylist(); });
   $("bottom-folders").addEventListener("click", () => { document.body.classList.remove("video-playing"); state.videoLibraryView = "folders"; updateVideoLibraryTabs(); renderPlaylist(); });
   $("bottom-rescan").addEventListener("click", () => { document.body.classList.remove("video-playing"); scanDeviceLibrary(); });
+  const shareVideoAppButton = $("share-video-app");
+  if (shareVideoAppButton) {
+    shareVideoAppButton.addEventListener("click", async () => {
+      const payload = { title: "Meraj Media", text: "Try Meraj Media — an offline audio and video player. Your media stays on your device." };
+      try {
+        if (navigator.share) { await navigator.share(payload); return; }
+        if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(payload.text); alert("Share text copied."); return; }
+        alert(payload.text);
+      } catch (error) { if (error && error.name !== "AbortError") alert("Sharing is not available on this device."); }
+    });
+  }
   $("rescan-library-top").addEventListener("click", scanDeviceLibrary);
   $("choose-video").addEventListener("click", () => { openMode("video"); scanDeviceLibrary(); });
   $("back-home")?.addEventListener("click", () => {
