@@ -619,7 +619,8 @@ body.has-selected-video-folder #player-screen #playlist { grid-template-columns:
 /* Fix 5: compact library, remove duplicate tabs/header, and keep bottom navigation stationary. */
 body:not(.portrait-video-mode) .topbar,
 body:not(.portrait-video-mode) .app-shell > .topbar { display:none !important; }
-body:not(.portrait-video-mode) #player-screen .video-library-toolbar .library-tabs { display:none !important; }
+/* Keep All Videos and Folders tabs visible on the main Video page. */
+body:not(.portrait-video-mode) #player-screen .video-library-toolbar .library-tabs { display:flex !important; }
 body:not(.portrait-video-mode) #player-screen.player-screen:not(.hidden) {
   height:100dvh !important;
   padding-top:calc(8px + env(safe-area-inset-top)) !important;
@@ -728,10 +729,11 @@ body.portrait-video-mode #player-screen > .bottom-navigation { display:none !imp
 #player-screen .bottom-nav-item span { font-size:17px !important; line-height:19px !important; }
 #player-screen .bottom-nav-item small { font-size:8px !important; line-height:10px !important; }
 #player-screen .local-footnote { display:none !important; }
-body.video-playing #player-screen .video-library-toolbar,
-body.video-playing #player-screen .video-folder-strip { display:none !important; }
+/* Keep video search and library tabs visible while a video is playing. */
+body.video-playing #player-screen .video-library-toolbar { display:flex !important; flex-direction:column !important; flex:0 0 auto !important; }
+body.video-playing #player-screen .video-folder-strip { display:flex !important; flex:0 0 auto !important; }
 body.video-playing #player-screen > .library-topline { margin-bottom:2px !important; }
-body.folders-view #player-screen .video-library-toolbar .library-search { display:none !important; }
+body.folders-view #player-screen .video-library-toolbar .library-search { display:flex !important; }
 body.folders-view #player-screen .video-library-toolbar { display:flex !important; }
 body.folders-view #player-screen .video-library-toolbar .library-tabs { flex:1 1 auto !important; }
 /* Inline portrait/player mode: seekbar and compact icon-only controls stay below the video. */
@@ -884,3 +886,10 @@ body.folders-view #player-screen .video-library-toolbar .library-tabs { flex:1 1
 #media-stage #video-overlay-speed small { font-size:12px!important; line-height:1; font-weight:800!important; letter-spacing:.1px; }
 #media-stage #video-overlay-speed:active { transform:scale(.97); }
 #media-stage #video-overlay-speed:focus-visible { outline:2px solid #75e6d7; outline-offset:2px; }
+
+/* Main Video page: one search bar and visible All Videos / Folders controls. */
+body:not(.portrait-video-mode) #player-screen .video-library-toolbar { display:flex !important; flex-direction:column !important; gap:8px !important; }
+body:not(.portrait-video-mode) #player-screen .video-library-toolbar .library-search { display:flex !important; width:100% !important; }
+body:not(.portrait-video-mode) #player-screen .video-library-toolbar .library-tabs { display:flex !important; width:100% !important; margin-top:0 !important; }
+body:not(.portrait-video-mode) #player-screen .video-library-toolbar .library-tab { min-height:38px !important; }
+body:not(.portrait-video-mode) #player-screen .video-folder-strip:empty { display:none !important; }
