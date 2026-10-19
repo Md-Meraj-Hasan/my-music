@@ -48,7 +48,7 @@
   const state = {
     mode: "video", files: [], index: 0, objectUrls: [], allAudioFiles: [],
     favorites: loadFavorites(), favoritesOnly: false, shuffle: false,
-    repeat: "off", speed: 1, lastPlayed: null, videoLocked: false, videoOrientationLocked: false, videoFit: "contain", lastVideoTap: 0, videoLibraryView: "videos", videoSearch: "", videoSelectedFolder: "", videoSeeking: false, thumbnailCache: new Map(), thumbnailObserver: null, controlsTimer: null, lastTouchAt: 0,
+    repeat: "off", speed: 1, lastPlayed: null, videoLocked: false, videoOrientationLocked: false, videoFit: "contain", lastVideoTap: 0, videoLibraryView: "videos", videoSearch: "", videoSelectedFolder: "", videoSeeking: false, videoZoom: 1, thumbnailCache: new Map(), thumbnailObserver: null, controlsTimer: null, lastTouchAt: 0,
     audioBoost: 1, videoBoost: 1, audioGainContext: null, videoGainContext: null,
     audioGainNode: null, videoGainNode: null, audioSourceNode: null, videoSourceNode: null
   };
@@ -348,7 +348,7 @@
       videoUrl = state.objectUrls[state.index];
     }
     audio.pause(); video.pause();
-    state.videoFit = "contain"; applyVideoFit();
+    state.videoFit = "contain"; resetVideoZoom(); applyVideoFit();
     audio.removeAttribute("src");
     if (videoUrl) {
       $("video-frame").classList.remove("hidden");
@@ -396,6 +396,52 @@
   function applyVideoFit() {
     video.style.objectFit = state.videoFit;
     updateDisplayModeIcon();
+  }
+  function resetVideoZoom() {
+    state.videoZoom = 1;
+    video.style.transform = "scale(1)";
+    video.style.transformOrigin = "50% 50%";
+  }
+  function applyVideoZoom(scale) {
+    state.videoZoom = Math.max(1, Math.min(2, scale));
+    video.style.transformOrigin = "50% 50%";
+    video.style.transform = `scale(${state.videoZoom})`;
+  }
+  function installPinchZoom() {
+    let startDistance = 0;
+    let startScale = 1;
+    let pinching = false;
+    let suppressClickUntil = 0;
+    const distance = (a, b) => Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+    video.addEventListener("touchstart", event => {
+      if (event.touches.length !== 2) return;
+      startDistance = distance(event.touches[0], event.touches[1]);
+      startScale = state.videoZoom || 1;
+      pinching = true;
+      suppressClickUntil = Date.now() + 700;
+    }, { passive: true });
+    video.addEventListener("touchmove", event => {
+      if (!pinching || event.touches.length !== 2 || !startDistance) return;
+      const nextDistance = distance(event.touches[0], event.touches[1]);
+      applyVideoZoom(startScale * nextDistance / startDistance);
+      suppressClickUntil = Date.now() + 700;
+      if (event.cancelable) event.preventDefault();
+    }, { passive: false });
+    const finishPinch = event => {
+      if (!pinching) return;
+      if (event.cancelable) event.preventDefault();
+      pinching = false;
+      startDistance = 0;
+      suppressClickUntil = Date.now() + 700;
+    };
+    video.addEventListener("touchend", finishPinch, { passive: false });
+    video.addEventListener("touchcancel", finishPinch, { passive: false });
+    videoFrame?.addEventListener("click", event => {
+      if (Date.now() < suppressClickUntil) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    }, true);
   }
   async function cycleVideoDisplayMode() {
     const fullscreen = Boolean(document.fullscreenElement) || $("video-frame")?.classList.contains("is-fullscreen");
@@ -892,6 +938,7 @@
     frame.classList.toggle("video-portrait", isPortrait);
     frame.classList.toggle("video-landscape", !isPortrait);
     state.videoFit = "contain";
+    resetVideoZoom();
     applyVideoFit();
     const status = $("video-status");
     $("video-overlay-title").textContent = state.files[state.index]?.name || "Now playing";
@@ -920,6 +967,7 @@
   // Smooth, non-blocking touch behavior: do not preventDefault() on touchend,
   // because Android WebView may then cancel taps or interfere with vertical scrolling.
   const videoFrame = $("video-frame");
+  installPinchZoom();
   function showVideoControls(show) {
     const controls = $("video-overlay-controls");
     if (!controls) return;

@@ -922,3 +922,9 @@ body.folders-view #player-screen .video-library-toolbar .library-tabs { flex:1 1
     margin-top: 0 !important;
   }
 }
+
+
+/* Smooth two-finger pinch zoom for video: 100%–200%. Keep the seekbar and overlay controls independent. */
+#media-stage #video-frame { touch-action: pan-y !important; }
+#media-stage #video-frame .video-element { touch-action: none !important; transform-origin: 50% 50%; will-change: transform; transition: transform 0ms linear; }
+#media-stage #video-frame .video-overlay-controls { touch-action: manipulation !important; }

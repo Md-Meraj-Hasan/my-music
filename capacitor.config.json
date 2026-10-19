@@ -1,10 +1,8 @@
-
 {
   "appId": "com.meraj.mediaplayer",
-  "appName": "Nice Multimedia",
+  "appName": "Professional Local Media Player",
   "webDir": "dist",
   "android": {
     "allowMixedContent": false
   }
 }
-
