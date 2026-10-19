@@ -15,7 +15,7 @@
       window.parent.postMessage({ bridge: 'meraj-video-native', requestId, action, payload }, '*');
     });
   }
-  window.addEventListener('message', event => {
+  window.addEventListener('message', async event => {
     const message = event.data;
     if (!message) return;
     if (message.bridge === 'meraj-video-native-result' && nativePending.has(message.requestId)) {
@@ -25,6 +25,9 @@
       window.handleMerajAndroidBack?.();
     } else if (message.type === 'meraj-video-parent-hide') {
       try { video.pause(); audio.pause(); } catch (_) {}
+      // Leaving the Video page must restore portrait at the native Android level;
+      // the Web Screen Orientation API alone does not reliably reset Capacitor WebView.
+      try { await callParentNative('orientationLock', { orientation: 'portrait' }); } catch (_) {}
       try { screen.orientation?.unlock?.(); } catch (_) {}
       state.videoOrientationLocked = false;
       if (state.controlsTimer) { clearTimeout(state.controlsTimer); state.controlsTimer = null; }
@@ -1017,12 +1020,17 @@
       const stage = $("media-stage");
       if (document.fullscreenElement) {
         try { await document.exitFullscreen(); } catch (_) {}
+        // Back from a landscape/fullscreen video should return to portrait.
+        try { await callParentNative('orientationLock', { orientation: 'portrait' }); } catch (_) {}
         try { screen.orientation?.unlock?.(); } catch (_) {}
+        state.videoOrientationLocked = false;
         return;
       }
       if (frame && frame.classList.contains("is-fullscreen")) {
         frame.classList.remove("is-fullscreen");
+        try { await callParentNative('orientationLock', { orientation: 'portrait' }); } catch (_) {}
         try { screen.orientation?.unlock?.(); } catch (_) {}
+        state.videoOrientationLocked = false;
         positionVideoControls();
         showVideoControls(false);
         return;
@@ -1033,7 +1041,9 @@
         if (frame) frame.classList.add("hidden");
         document.body.classList.remove("video-playing");
         if (state.videoLocked) setVideoLock(false);
+        try { await callParentNative('orientationLock', { orientation: 'portrait' }); } catch (_) {}
         try { screen.orientation?.unlock?.(); } catch (_) {}
+        state.videoOrientationLocked = false;
         renderPlaylist();
         return;
       }
