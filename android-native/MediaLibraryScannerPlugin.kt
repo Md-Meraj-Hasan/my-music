@@ -3,6 +3,10 @@ package com.meraj.mediaplayer
 import android.content.ContentUris
 import android.net.Uri
 import android.os.Build
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
+import android.util.Base64
+import java.io.ByteArrayOutputStream
 import android.provider.MediaStore
 import java.io.File
 import java.io.FileOutputStream
@@ -36,7 +40,8 @@ class MediaLibraryScannerPlugin : Plugin() {
         ) else mutableListOf(
             MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME,
             MediaStore.Audio.Media.SIZE, MediaStore.Audio.Media.MIME_TYPE,
-            MediaStore.Audio.Media.DURATION
+            MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) projection.add(MediaStore.MediaColumns.RELATIVE_PATH)
         val sort = if (type == "video") "${MediaStore.Video.Media.DISPLAY_NAME} COLLATE NOCASE ASC"
@@ -59,6 +64,10 @@ class MediaLibraryScannerPlugin : Plugin() {
                     item.put("size", cursor.getLong(sizeCol))
                     item.put("type", cursor.getString(mimeCol) ?: "")
                     item.put("duration", if (durationCol >= 0) cursor.getLong(durationCol) else 0L)
+                    val artistCol = cursor.getColumnIndex(MediaStore.Audio.Media.ARTIST)
+                    val albumCol = cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM)
+                    item.put("artist", if (artistCol >= 0) cursor.getString(artistCol) ?: "Unknown artist" else "Unknown artist")
+                    item.put("album", if (albumCol >= 0) cursor.getString(albumCol) ?: "Unknown album" else "Unknown album")
                     item.put("relativePath", if (pathCol >= 0) cursor.getString(pathCol) ?: "Device files" else "Device files")
                     items.put(item)
                 }
@@ -70,6 +79,33 @@ class MediaLibraryScannerPlugin : Plugin() {
             call.reject("Could not scan device media: ${e.message}", e)
         }
     }
+    /** Returns a small cached video-frame thumbnail as a data URL for library cards. */
+    @PluginMethod
+    fun getThumbnail(call: PluginCall) {
+        val rawUri = call.getString("uri")
+        if (rawUri.isNullOrBlank()) { call.reject("Missing media URI"); return }
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(context, Uri.parse(rawUri))
+            val frame = retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            if (frame == null) { call.resolve(JSObject().put("thumbnail", "")); return }
+            val width = 320
+            val scale = minOf(1.0, width.toDouble() / frame.width.toDouble())
+            val thumb = if (scale < 1.0) Bitmap.createScaledBitmap(frame, (frame.width * scale).toInt().coerceAtLeast(1), (frame.height * scale).toInt().coerceAtLeast(1), true) else frame
+            val bytes = ByteArrayOutputStream()
+            thumb.compress(Bitmap.CompressFormat.JPEG, 78, bytes)
+            val encoded = Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP)
+            if (thumb !== frame) thumb.recycle()
+            frame.recycle()
+            call.resolve(JSObject().put("thumbnail", "data:image/jpeg;base64,$encoded"))
+        } catch (e: Exception) {
+            call.resolve(JSObject().put("thumbnail", ""))
+        } finally {
+            try { retriever.release() } catch (_: Exception) {}
+        }
+    }
+
     /** Copies a MediaStore content URI into app cache so Android WebView can play it reliably. */
     @PluginMethod
     fun preparePlayback(call: PluginCall) {

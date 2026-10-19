@@ -1,12 +1,17 @@
 import { defineConfig } from 'vite';
+import { resolve } from 'node:path';
 
-// Capacitor loads assets from a local WebView origin. Relative asset URLs
-// keep the generated HTML working inside the APK as well as in browser preview.
 export default defineConfig({
   base: './',
   build: {
     outDir: 'dist',
     emptyOutDir: true,
     assetsDir: 'assets',
-  },
+    rollupOptions: {
+      input: {
+        main: resolve(process.cwd(), 'index.html'),
+        video: resolve(process.cwd(), 'video-player.html')
+      }
+    }
+  }
 });
