@@ -1,8 +1,10 @@
+
 {
   "appId": "com.meraj.mediaplayer",
   "appName": "Nice Multimedia",
   "webDir": "dist",
   "android": {
-    "allowMixedContent": falser
+    "allowMixedContent": false
   }
 }
+
