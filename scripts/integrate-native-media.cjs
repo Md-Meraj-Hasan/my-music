@@ -168,4 +168,4 @@ if (!xml.includes('MerajPlaybackService')) {
 }
 fs.writeFileSync(manifest, xml);
 
-console.log(`Native media plugins and direct-URI Media3 video activity copied and registered in ${mainActivity}; media permissions and ExoPlayer dependency configured.`);
+console.log(`Native Media3 audio service/plugin and direct-URI video activity copied and registered in ${mainActivity}; media permissions and ExoPlayer/session/UI dependencies configured.`);

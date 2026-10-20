@@ -159,8 +159,8 @@ class MerajMediaPlayerPlugin : Plugin() {
 
     @PluginMethod fun setPlaybackSpeed(call: PluginCall) = withController(call) { p ->
         val speed = call.getDouble("speed")
-        if (speed == null || !speed.isFinite() || speed < 0.5 || speed > 1.5) {
-            call.reject("Playback speed must be between 0.5 and 1.5.")
+        if (speed == null || !speed.isFinite() || speed < 0.5 || speed > 2.0) {
+            call.reject("Playback speed must be between 0.5 and 2.0.")
         } else {
             p.setPlaybackParameters(PlaybackParameters(speed.toFloat(), 1f))
             call.resolve(JSObject().put("speed", speed).put("accepted", true))
