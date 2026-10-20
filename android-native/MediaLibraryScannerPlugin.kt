@@ -85,7 +85,9 @@ class MediaLibraryScannerPlugin : Plugin() {
                     item.put("uri", uri.toString())
                     item.put("name", cursor.getString(nameCol) ?: "Unknown media")
                     item.put("size", cursor.getLong(sizeCol))
-                    item.put("type", cursor.getString(mimeCol) ?: "")
+                    val detectedMime = cursor.getString(mimeCol) ?: ""
+                    item.put("type", detectedMime)
+                    item.put("mimeType", detectedMime)
                     item.put("duration", if (durationCol >= 0) cursor.getLong(durationCol) else 0L)
                     val artistCol = cursor.getColumnIndex(MediaStore.Audio.Media.ARTIST)
                     val albumCol = cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM)

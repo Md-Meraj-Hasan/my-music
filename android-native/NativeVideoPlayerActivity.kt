@@ -45,6 +45,7 @@ class NativeVideoPlayerActivity : Activity() {
     private lateinit var rotateButton: TextView
     private lateinit var lockButton: TextView
     private lateinit var shareButton: TextView
+    private lateinit var titleLabel: TextView
     private lateinit var scaleDetector: ScaleGestureDetector
     private var pinchScale = 1f
     private var isPinching = false
@@ -122,7 +123,7 @@ class NativeVideoPlayerActivity : Activity() {
         playerView.setOnTouchListener { _, event ->
             scaleDetector.onTouchEvent(event)
             if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
-                if (!isPinching && event.pointerCount <= 1) showControls()
+                if (!locked && !isPinching && event.pointerCount <= 1) showControls()
             }
             true
         }
@@ -200,6 +201,12 @@ class NativeVideoPlayerActivity : Activity() {
                         runOnUiThread { Toast.makeText(this@NativeVideoPlayerActivity, "Video playback failed: ${error.errorCodeName}", Toast.LENGTH_LONG).show() }
                     }
                     override fun onIsPlayingChanged(isPlaying: Boolean) { playButton.setImageResource(if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play) }
+                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        val current = mediaItem ?: return
+                        videoUri = current.localConfiguration?.uri ?: runCatching { Uri.parse(current.mediaId) }.getOrNull()
+                        videoTitle = current.mediaMetadata.title?.toString()?.takeIf { it.isNotBlank() } ?: videoUri?.lastPathSegment ?: "Video"
+                        runOnUiThread { titleLabel.text = videoTitle }
+                    }
                 }
                 listener = l; c.addListener(l)
                 handler.post(progress); showControls()
@@ -217,15 +224,16 @@ class NativeVideoPlayerActivity : Activity() {
             setBackgroundColor(0x99000000.toInt())
         }
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
-        val title = TextView(this).apply { text = videoTitle; setTextColor(Color.WHITE); textSize = 14f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
-        top.addView(title, LinearLayout.LayoutParams(0, 40, 1f))
+        titleLabel = TextView(this).apply { text = videoTitle; setTextColor(Color.WHITE); textSize = 14f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
+        top.addView(titleLabel, LinearLayout.LayoutParams(0, 40, 1f))
         speedButton = compactTool("1× ▾") { showSpeedPicker() }
         top.addView(speedButton)
         shareButton = compactTool("Share") { shareCurrentVideo() }
         top.addView(shareButton)
-        controls.addView(top)
+        // Keep title, speed and share at the TOP of the video, separate from playback controls.
+        root.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
 
-        // All playback/action icons stay in one compact horizontal row.
+        // All playback/action icons stay in one compact horizontal row at the bottom.
         val middle = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL; weightSum = 9f }
         fun addTool(label: String, action: () -> Unit) {
             val v = compactTool(label, action)

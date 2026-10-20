@@ -331,8 +331,8 @@
           $("video-status").textContent = "Opening video directly from storage…";
           $("video-status").classList.remove("hidden");
           const videoQueue = (state.videoSelectedFolder ? state.files.filter(f => getFolder(f) === state.videoSelectedFolder) : state.files)
-            .filter(f => f && f.uri && (f.mimeType || '').startsWith('video/'))
-            .map(f => ({ uri: f.uri, name: f.name || 'Video', mimeType: f.mimeType || 'video/*' }));
+            .filter(f => f && f.uri && String(f.mimeType || f.type || '').startsWith('video/'))
+            .map(f => ({ uri: f.uri, name: f.name || 'Video', mimeType: f.mimeType || f.type || 'video/*' }));
           await scanner.launchVideo({ uri: file.uri, name: file.name, size: file.size, queue: videoQueue });
           $("video-status").textContent = "Opened in native video player";
           $("video-status").classList.remove("hidden");
