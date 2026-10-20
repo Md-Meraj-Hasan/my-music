@@ -280,7 +280,7 @@ class NativeVideoPlayerActivity : Activity() {
         addTool("↶5") { controller?.let { it.seekTo((it.currentPosition - 5_000).coerceAtLeast(0)) } }
         playButton = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_media_play); setColorFilter(Color.WHITE); setBackgroundColor(Color.TRANSPARENT)
-            setPadding(4, 4, 4, 4); scaleType = ImageButton.ScaleType.FIT_CENTER; setOnClickListener { controller?.let { if (it.isPlaying) it.pause() else it.play() }; showControls() }
+            setPadding(4, 4, 4, 4); setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER); setOnClickListener { controller?.let { if (it.isPlaying) it.pause() else it.play() }; showControls() }
         }
         middle.addView(playButton, LinearLayout.LayoutParams(0, dp(48), 1f))
         addTool("15↷") { controller?.let { it.seekTo((it.currentPosition + 15_000).coerceAtMost(it.duration.takeIf { d -> d > 0 } ?: Long.MAX_VALUE)) } }
