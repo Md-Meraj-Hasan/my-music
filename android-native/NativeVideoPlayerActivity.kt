@@ -45,6 +45,7 @@ class NativeVideoPlayerActivity : Activity() {
     private lateinit var rotateButton: TextView
     private lateinit var lockButton: TextView
     private lateinit var shareButton: TextView
+    private lateinit var volumeButton: TextView
     private lateinit var titleLabel: TextView
     private lateinit var scaleDetector: ScaleGestureDetector
     private var pinchScale = 1f
@@ -220,39 +221,53 @@ class NativeVideoPlayerActivity : Activity() {
     private fun buildControls() {
         controls = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(8, 6, 8, 8)
+            setPadding(dp(8), dp(6), dp(8), dp(12))
             setBackgroundColor(0x99000000.toInt())
         }
-        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
-        titleLabel = TextView(this).apply { text = videoTitle; setTextColor(Color.WHITE); textSize = 14f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
-        top.addView(titleLabel, LinearLayout.LayoutParams(0, 40, 1f))
-        speedButton = compactTool("1× ▾") { showSpeedPicker() }.apply {
+        val top = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            setBackgroundColor(0x66000000)
+        }
+        // Requested layout: speed button on the LEFT, title in the middle, share on the RIGHT.
+        speedButton = compactTool("1×  ▾") { showSpeedPicker() }.apply {
             contentDescription = "Playback speed menu"
-            minWidth = dp(56)
+            minWidth = dp(76)
+            textSize = 16f
+            setPadding(dp(10), dp(8), dp(10), dp(8))
             isClickable = true
             isFocusable = true
         }
-        top.addView(speedButton)
-        shareButton = compactTool("Share") { shareCurrentVideo() }.apply {
+        top.addView(speedButton, LinearLayout.LayoutParams(-2, dp(48)))
+        titleLabel = TextView(this).apply {
+            text = videoTitle; setTextColor(Color.WHITE); textSize = 14f
+            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), 0, dp(8), 0)
+        }
+        top.addView(titleLabel, LinearLayout.LayoutParams(0, dp(48), 1f))
+        shareButton = compactTool("↗  Share") { shareCurrentVideo() }.apply {
             contentDescription = "Share current video"
-            minWidth = dp(64)
+            minWidth = dp(88)
+            textSize = 16f
+            setPadding(dp(10), dp(8), dp(10), dp(8))
             isClickable = true
             isFocusable = true
         }
-        top.addView(shareButton)
-        // Keep title, speed and share at the TOP of the video, separate from playback controls.
+        top.addView(shareButton, LinearLayout.LayoutParams(-2, dp(48)))
         root.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
 
         // All playback/action icons stay in one compact horizontal row at the bottom.
         val middle = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL; weightSum = 9f }
         fun addTool(label: String, action: () -> Unit) {
-            val v = compactTool(label, action)
-            middle.addView(v, LinearLayout.LayoutParams(0, 44, 1f))
+            val v = compactTool(label, action).apply { textSize = 15f; setPadding(1, dp(5), 1, dp(5)) }
+            middle.addView(v, LinearLayout.LayoutParams(0, dp(48), 1f))
         }
         fun addIcon(icon: Int, action: () -> Unit) {
             val v = iconButton(icon, action)
-            v.layoutParams = LinearLayout.LayoutParams(0, 44, 1f)
-            v.setPadding(2, 4, 2, 4)
+            v.layoutParams = LinearLayout.LayoutParams(0, dp(48), 1f)
+            v.setPadding(2, dp(4), 2, dp(4))
             middle.addView(v)
         }
         addIcon(android.R.drawable.ic_media_previous) {
@@ -265,9 +280,9 @@ class NativeVideoPlayerActivity : Activity() {
         addTool("↶5") { controller?.let { it.seekTo((it.currentPosition - 5_000).coerceAtLeast(0)) } }
         playButton = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_media_play); setColorFilter(Color.WHITE); setBackgroundColor(Color.TRANSPARENT)
-            setPadding(4, 4, 4, 4); setOnClickListener { controller?.let { if (it.isPlaying) it.pause() else it.play() }; showControls() }
+            setPadding(4, 4, 4, 4); scaleType = ImageButton.ScaleType.FIT_CENTER; setOnClickListener { controller?.let { if (it.isPlaying) it.pause() else it.play() }; showControls() }
         }
-        middle.addView(playButton, LinearLayout.LayoutParams(0, 44, 1f))
+        middle.addView(playButton, LinearLayout.LayoutParams(0, dp(48), 1f))
         addTool("15↷") { controller?.let { it.seekTo((it.currentPosition + 15_000).coerceAtMost(it.duration.takeIf { d -> d > 0 } ?: Long.MAX_VALUE)) } }
         addIcon(android.R.drawable.ic_media_next) {
             controller?.let { p ->
@@ -281,18 +296,23 @@ class NativeVideoPlayerActivity : Activity() {
             locked = !locked
             lockButton.text = if (locked) "🔒" else "🔓"
             lockButton.contentDescription = if (locked) "Unlock video controls" else "Lock video controls"
+            setControlsLocked(locked)
             if (locked) {
                 controls.visibility = View.VISIBLE
                 handler.removeCallbacks(hideControls)
-                Toast.makeText(this, "Controls locked", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Controls locked — tap 🔒 to unlock", Toast.LENGTH_SHORT).show()
             } else {
                 showControls()
                 Toast.makeText(this, "Controls unlocked", Toast.LENGTH_SHORT).show()
             }
-        }
+        }.apply { textSize = 19f; setPadding(2, dp(6), 2, dp(6)) }
         lockButton.contentDescription = "Lock video controls"
         middle.addView(lockButton, LinearLayout.LayoutParams(0, 44, 1f))
-        addTool(if (volumeMuted) "🔇" else "Vol") { showVolumePicker() }
+        volumeButton = compactTool(if (volumeMuted) "🔇" else "🔊") { showVolumePicker() }.apply {
+            textSize = 18f
+            contentDescription = "Adjust video volume"
+        }
+        middle.addView(volumeButton, LinearLayout.LayoutParams(0, dp(48), 1f))
         controls.addView(middle)
 
         val seekRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
@@ -315,13 +335,16 @@ class NativeVideoPlayerActivity : Activity() {
         }
         seekRow.addView(seekBar, LinearLayout.LayoutParams(0, 34, 1f)); durationLabel = timeLabel("00:00"); seekRow.addView(durationLabel)
         controls.addView(seekRow)
-        root.addView(controls, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+        val controlsParams = FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM)
+        controlsParams.bottomMargin = dp(14)
+        root.addView(controls, controlsParams)
         controls.setOnClickListener { showControls() }
     }
 
     private fun compactTool(label: String, action: () -> Unit): TextView = TextView(this).apply {
-        text = label; textSize = 12f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; maxLines = 1; includeFontPadding = false
-        setPadding(2, 4, 2, 4); minWidth = 0
+        text = label; textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; maxLines = 1; includeFontPadding = false
+        setPadding(4, 6, 4, 6); minWidth = 0
+        isClickable = true; isFocusable = true
         setOnClickListener { action(); showControls() }
     }
 
@@ -335,6 +358,19 @@ class NativeVideoPlayerActivity : Activity() {
         setOnClickListener { action(); showControls() }
     }
     private fun timeLabel(value: String) = TextView(this).apply { text = value; setTextColor(Color.WHITE); textSize = 12f; setPadding(5, 0, 5, 0) }
+    private fun setControlsLocked(value: Boolean) {
+        fun visit(view: View) {
+            if (view === lockButton) return
+            view.isEnabled = !value
+            if (view is android.view.ViewGroup) {
+                for (i in 0 until view.childCount) visit(view.getChildAt(i))
+            }
+        }
+        // Keep the lock button enabled so the user can always unlock the controls.
+        visit(controls)
+        lockButton.isEnabled = true
+        lockButton.alpha = 1f
+    }
     private fun toggleControls() { if (controls.visibility == View.VISIBLE) { if (!locked) controls.visibility = View.GONE } else showControls() }
     private fun showControls() { controls.visibility = View.VISIBLE; handler.removeCallbacks(hideControls); if (!locked) handler.postDelayed(hideControls, 5000) }
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
@@ -372,6 +408,7 @@ class NativeVideoPlayerActivity : Activity() {
                 val current = controller ?: return
                 current.volume = value / 100f
                 volumeMuted = value == 0
+                volumeButton.text = if (volumeMuted) "🔇" else "🔊"
                 label.text = if (volumeMuted) "Volume: muted" else "Volume: $value%"
             }
             override fun onStopTrackingTouch(sb: SeekBar) {}
@@ -380,11 +417,13 @@ class NativeVideoPlayerActivity : Activity() {
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
                 controller?.volume = 0f
                 volumeMuted = true
+                volumeButton.text = "🔇"
                 slider.progress = 0
                 label.text = "Volume: muted"
             }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 if (slider.progress > 0) volumeMuted = false
+                volumeButton.text = if (volumeMuted) "🔇" else "🔊"
                 dialog.dismiss()
                 showControls()
             }
