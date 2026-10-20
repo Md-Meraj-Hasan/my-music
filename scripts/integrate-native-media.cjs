@@ -47,7 +47,7 @@ if (mainActivity) {
 }
 
 const activityDir = path.dirname(mainActivity);
-for (const name of ['MediaPermissionPlugin.kt', 'MediaLibraryScannerPlugin.kt', 'MerajMediaPlayerPlugin.kt', 'MerajPlaybackService.kt']) {
+for (const name of ['MediaPermissionPlugin.kt', 'MediaLibraryScannerPlugin.kt', 'MerajMediaPlayerPlugin.kt', 'MerajPlaybackService.kt', 'NativeVideoPlayerActivity.kt']) {
   const source = path.join(nativeRoot, name);
   if (!fs.existsSync(source)) throw new Error(`Required native plugin source missing: ${source}`);
   let code = fs.readFileSync(source, 'utf8');
@@ -145,6 +145,12 @@ if (!gradleText.includes('androidx.media3:media3-exoplayer')) {
   fs.writeFileSync(appGradle, gradleText);
 }
 
+
+if (!gradleText.includes('androidx.media3:media3-ui')) {
+  gradleText = gradleText.replace(/dependencies\s*\{/, match => `${match}\n    implementation 'androidx.media3:media3-ui:1.5.1'`);
+  fs.writeFileSync(appGradle, gradleText);
+}
+
 // Register the MediaSessionService and foreground playback permissions.
 xml = fs.readFileSync(manifest, 'utf8');
 const servicePermissions = [
@@ -154,9 +160,12 @@ const servicePermissions = [
 for (const permission of servicePermissions) {
   if (!xml.includes(permission)) xml = xml.replace(/<manifest\b[^>]*>/, match => `${match}\n    ${permission}`);
 }
+if (!xml.includes('NativeVideoPlayerActivity')) {
+  xml = xml.replace(/<application\b[^>]*>/, match => `${match}\n        <activity android:name=".NativeVideoPlayerActivity" android:exported="false" android:screenOrientation="unspecified" android:configChanges="orientation|screenSize|keyboardHidden" />`);
+}
 if (!xml.includes('MerajPlaybackService')) {
   xml = xml.replace(/<application\b[^>]*>/, match => `${match}\n        <service android:name=".MerajPlaybackService" android:foregroundServiceType="mediaPlayback" android:exported="true">\n            <intent-filter>\n                <action android:name="androidx.media3.session.MediaSessionService" />\n            </intent-filter>\n        </service>`);
 }
 fs.writeFileSync(manifest, xml);
 
-console.log(`Native media plugins copied and registered in ${mainActivity}; media permissions and ExoPlayer dependency configured.`);
+console.log(`Native Media3 audio service/plugin and direct-URI video activity copied and registered in ${mainActivity}; media permissions and ExoPlayer/session/UI dependencies configured.`);

@@ -37,7 +37,7 @@
   const VideoPermissionBridge = { requestIfNeeded: () => callParentNative('permission') };
   const VideoScannerBridge = {
     scan: payload => callParentNative('scan', payload),
-    preparePlayback: payload => callParentNative('preparePlayback', payload),
+    launchVideo: payload => callParentNative('launchVideo', payload),
     getThumbnail: payload => callParentNative('getThumbnail', payload),
     shareMedia: payload => callParentNative('shareMedia', payload)
   };
@@ -48,7 +48,7 @@
   const state = {
     mode: "video", files: [], index: 0, objectUrls: [], allAudioFiles: [],
     favorites: loadFavorites(), favoritesOnly: false, shuffle: false,
-    repeat: "off", speed: 1, lastPlayed: null, videoLocked: false, videoOrientationLocked: false, videoFit: "contain", lastVideoTap: 0, videoLibraryView: "videos", videoSearch: "", videoSelectedFolder: "", videoSeeking: false, videoZoom: 1, thumbnailCache: new Map(), thumbnailObserver: null, controlsTimer: null, lastTouchAt: 0,
+    repeat: "off", speed: 1, lastPlayed: null, videoLocked: false, videoOrientationLocked: false, videoFit: "contain", lastVideoTap: 0, videoLibraryView: "videos", videoSearch: "", videoSelectedFolder: "", videoSeeking: false, thumbnailCache: new Map(), thumbnailObserver: null, controlsTimer: null, lastTouchAt: 0,
     audioBoost: 1, videoBoost: 1, audioGainContext: null, videoGainContext: null,
     audioGainNode: null, videoGainNode: null, audioSourceNode: null, videoSourceNode: null
   };
@@ -320,27 +320,28 @@
     const file = list[state.index];
     let videoUrl;
     if (file?.uri) {
-      // MediaStore content:// URIs are not reliably playable by the WebView video element.
-      // Copy to app cache only when the user actually requests playback.
+      // Native Media3/ExoPlayer reads the original content:// URI directly.
+      // No app-cache copy and no whole-video buffering in JavaScript.
       if (autoplay) {
         try {
           const scanner = VideoScannerBridge;
-          if (!scanner || typeof scanner.preparePlayback !== "function") {
-            throw new Error("Native video playback integration is missing. Rebuild the latest APK.");
+          if (!scanner || typeof scanner.launchVideo !== "function") {
+            throw new Error("Direct native video playback is missing. Build and install the latest APK.");
           }
-          $("video-status").textContent = "Preparing video for playback…";
+          $("video-status").textContent = "Opening video directly from storage…";
           $("video-status").classList.remove("hidden");
-          const prepared = await scanner.preparePlayback({ uri: file.uri, name: file.name, size: file.size });
-          videoUrl = window.parent?.Capacitor?.convertFileSrc ? window.parent.Capacitor.convertFileSrc(prepared.path) : prepared.path;
+          await scanner.launchVideo({ uri: file.uri, name: file.name, size: file.size });
+          $("video-status").textContent = "Opened in native video player";
+          $("video-status").classList.remove("hidden");
+          return;
         } catch (error) {
-          console.error("Could not prepare video", error);
+          console.error("Could not launch direct native video playback", error);
           $("video-status").textContent = error?.message || "Could not open this video.";
           $("video-status").classList.remove("hidden");
           return;
         }
-      } else {
-        videoUrl = "";
       }
+      videoUrl = "";
     } else {
       if (!state.objectUrls[state.index] || typeof state.objectUrls[state.index] !== "string") {
         state.objectUrls = list.map(f => URL.createObjectURL(f));
@@ -348,7 +349,7 @@
       videoUrl = state.objectUrls[state.index];
     }
     audio.pause(); video.pause();
-    state.videoFit = "contain"; resetVideoZoom(); applyVideoFit();
+    state.videoFit = "contain"; applyVideoFit();
     audio.removeAttribute("src");
     if (videoUrl) {
       $("video-frame").classList.remove("hidden");
@@ -396,52 +397,6 @@
   function applyVideoFit() {
     video.style.objectFit = state.videoFit;
     updateDisplayModeIcon();
-  }
-  function resetVideoZoom() {
-    state.videoZoom = 1;
-    video.style.transform = "scale(1)";
-    video.style.transformOrigin = "50% 50%";
-  }
-  function applyVideoZoom(scale) {
-    state.videoZoom = Math.max(1, Math.min(2, scale));
-    video.style.transformOrigin = "50% 50%";
-    video.style.transform = `scale(${state.videoZoom})`;
-  }
-  function installPinchZoom() {
-    let startDistance = 0;
-    let startScale = 1;
-    let pinching = false;
-    let suppressClickUntil = 0;
-    const distance = (a, b) => Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
-    video.addEventListener("touchstart", event => {
-      if (event.touches.length !== 2) return;
-      startDistance = distance(event.touches[0], event.touches[1]);
-      startScale = state.videoZoom || 1;
-      pinching = true;
-      suppressClickUntil = Date.now() + 700;
-    }, { passive: true });
-    video.addEventListener("touchmove", event => {
-      if (!pinching || event.touches.length !== 2 || !startDistance) return;
-      const nextDistance = distance(event.touches[0], event.touches[1]);
-      applyVideoZoom(startScale * nextDistance / startDistance);
-      suppressClickUntil = Date.now() + 700;
-      if (event.cancelable) event.preventDefault();
-    }, { passive: false });
-    const finishPinch = event => {
-      if (!pinching) return;
-      if (event.cancelable) event.preventDefault();
-      pinching = false;
-      startDistance = 0;
-      suppressClickUntil = Date.now() + 700;
-    };
-    video.addEventListener("touchend", finishPinch, { passive: false });
-    video.addEventListener("touchcancel", finishPinch, { passive: false });
-    videoFrame?.addEventListener("click", event => {
-      if (Date.now() < suppressClickUntil) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-    }, true);
   }
   async function cycleVideoDisplayMode() {
     const fullscreen = Boolean(document.fullscreenElement) || $("video-frame")?.classList.contains("is-fullscreen");
@@ -694,7 +649,7 @@
         info.style.cssText = "display:flex;flex-direction:column;justify-content:center;position:relative;box-sizing:border-box;width:auto;min-width:0;min-height:84px;flex:1 1 auto;padding:8px 10px 8px 3px;overflow:hidden;background:transparent;color:#f5f3ff;cursor:pointer;";
       }
       // Video rows have one click handler on the card only. Avoid nested handlers
-      // calling playIndex twice, which can race native preparePlayback() and pause playback.
+      // calling playIndex twice, which can race native direct-URI launch and pause playback.
       if (!isVideo) info.addEventListener("click", () => {
         const queue = currentAudioList();
         playIndex(queue.findIndex(f => fileKey(f) === fileKey(file)), true, queue);
@@ -938,7 +893,6 @@
     frame.classList.toggle("video-portrait", isPortrait);
     frame.classList.toggle("video-landscape", !isPortrait);
     state.videoFit = "contain";
-    resetVideoZoom();
     applyVideoFit();
     const status = $("video-status");
     $("video-overlay-title").textContent = state.files[state.index]?.name || "Now playing";
@@ -967,7 +921,6 @@
   // Smooth, non-blocking touch behavior: do not preventDefault() on touchend,
   // because Android WebView may then cancel taps or interfere with vertical scrolling.
   const videoFrame = $("video-frame");
-  installPinchZoom();
   function showVideoControls(show) {
     const controls = $("video-overlay-controls");
     if (!controls) return;
