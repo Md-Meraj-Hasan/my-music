@@ -37,7 +37,7 @@
   const VideoPermissionBridge = { requestIfNeeded: () => callParentNative('permission') };
   const VideoScannerBridge = {
     scan: payload => callParentNative('scan', payload),
-    launchVideo: payload => callParentNative('launchVideo', payload),
+    preparePlayback: payload => callParentNative('preparePlayback', payload),
     getThumbnail: payload => callParentNative('getThumbnail', payload),
     shareMedia: payload => callParentNative('shareMedia', payload)
   };
@@ -320,28 +320,27 @@
     const file = list[state.index];
     let videoUrl;
     if (file?.uri) {
-      // Native Media3/ExoPlayer reads the original content:// URI directly.
-      // No app-cache copy and no whole-video buffering in JavaScript.
+      // MediaStore content:// URIs are not reliably playable by the WebView video element.
+      // Copy to app cache only when the user actually requests playback.
       if (autoplay) {
         try {
           const scanner = VideoScannerBridge;
-          if (!scanner || typeof scanner.launchVideo !== "function") {
-            throw new Error("Direct native video playback is missing. Build and install the latest APK.");
+          if (!scanner || typeof scanner.preparePlayback !== "function") {
+            throw new Error("Native video playback integration is missing. Rebuild the latest APK.");
           }
-          $("video-status").textContent = "Opening video directly from storage…";
+          $("video-status").textContent = "Preparing video for playback…";
           $("video-status").classList.remove("hidden");
-          await scanner.launchVideo({ uri: file.uri, name: file.name, size: file.size });
-          $("video-status").textContent = "Opened in native video player";
-          $("video-status").classList.remove("hidden");
-          return;
+          const prepared = await scanner.preparePlayback({ uri: file.uri, name: file.name, size: file.size });
+          videoUrl = window.parent?.Capacitor?.convertFileSrc ? window.parent.Capacitor.convertFileSrc(prepared.path) : prepared.path;
         } catch (error) {
-          console.error("Could not launch direct native video playback", error);
+          console.error("Could not prepare video", error);
           $("video-status").textContent = error?.message || "Could not open this video.";
           $("video-status").classList.remove("hidden");
           return;
         }
+      } else {
+        videoUrl = "";
       }
-      videoUrl = "";
     } else {
       if (!state.objectUrls[state.index] || typeof state.objectUrls[state.index] !== "string") {
         state.objectUrls = list.map(f => URL.createObjectURL(f));
@@ -649,7 +648,7 @@
         info.style.cssText = "display:flex;flex-direction:column;justify-content:center;position:relative;box-sizing:border-box;width:auto;min-width:0;min-height:84px;flex:1 1 auto;padding:8px 10px 8px 3px;overflow:hidden;background:transparent;color:#f5f3ff;cursor:pointer;";
       }
       // Video rows have one click handler on the card only. Avoid nested handlers
-      // calling playIndex twice, which can race native direct-URI launch and pause playback.
+      // calling playIndex twice, which can race native preparePlayback() and pause playback.
       if (!isVideo) info.addEventListener("click", () => {
         const queue = currentAudioList();
         playIndex(queue.findIndex(f => fileKey(f) === fileKey(file)), true, queue);
@@ -722,6 +721,7 @@
   $("bottom-folders").addEventListener("click", () => { document.body.classList.remove("video-playing"); state.videoLibraryView = "folders"; updateVideoLibraryTabs(); renderPlaylist(); });
   $("bottom-rescan").addEventListener("click", () => { document.body.classList.remove("video-playing"); scanDeviceLibrary(); });
   const shareVideoAppButton = $("share-video-app");
+  $("video-overlay-share")?.addEventListener("click", () => shareVideoAppButton?.click());
   if (shareVideoAppButton) {
     shareVideoAppButton.setAttribute("aria-label", "Share selected video");
     shareVideoAppButton.setAttribute("title", "Share selected video");

@@ -966,3 +966,13 @@ body.folders-view #player-screen .video-library-toolbar .library-tabs { flex:1 1
     margin: 0 !important;
   }
 }
+
+
+/* Requested compact layout: Share + Speed at the video top; all playback actions stay in one row. */
+#media-stage #video-overlay-controls .video-overlay-top {display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;min-width:0!important;}
+#media-stage .video-overlay-top-actions {display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:7px!important;flex:0 0 auto!important;}
+#media-stage #video-overlay-share {display:inline-flex!important;align-items:center!important;justify-content:center!important;height:36px!important;min-height:36px!important;padding:0 13px!important;border-radius:10px!important;background:#071318e8!important;border:1px solid #69cfc577!important;color:#fff!important;font-size:14px!important;font-weight:750!important;white-space:nowrap!important;}
+#media-stage #video-overlay-controls .video-overlay-actions {display:flex!important;flex-wrap:nowrap!important;align-items:center!important;justify-content:space-between!important;gap:clamp(1px,0.8vw,5px)!important;width:100%!important;min-width:0!important;}
+#media-stage #video-overlay-controls .video-overlay-actions button {flex:1 1 0!important;min-width:0!important;max-width:none!important;width:auto!important;height:clamp(28px,8vw,36px)!important;min-height:clamp(28px,8vw,36px)!important;padding:0!important;font-size:clamp(11px,3.5vw,15px)!important;white-space:nowrap!important;}
+#media-stage #video-overlay-controls .video-overlay-actions #video-overlay-play {flex:1.1 1 0!important;}
+@media(max-width:360px){#media-stage #video-overlay-share{padding:0 8px!important;font-size:12px!important}#media-stage .video-overlay-top-actions{gap:4px!important}#media-stage #video-overlay-controls .video-overlay-actions button{font-size:11px!important}}
