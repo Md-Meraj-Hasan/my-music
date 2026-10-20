@@ -208,7 +208,7 @@ class NativeVideoPlayerActivity : Activity() {
         controls.addView(top)
 
         // All playback/action icons stay in one compact horizontal row.
-        val middle = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL; weightSum = 9f; baselineAligned = false }
+        val middle = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL; weightSum = 9f }
         fun addTool(label: String, action: () -> Unit) {
             val v = compactTool(label, action)
             middle.addView(v, LinearLayout.LayoutParams(0, 44, 1f))
