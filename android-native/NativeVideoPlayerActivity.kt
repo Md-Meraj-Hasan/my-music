@@ -226,9 +226,19 @@ class NativeVideoPlayerActivity : Activity() {
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
         titleLabel = TextView(this).apply { text = videoTitle; setTextColor(Color.WHITE); textSize = 14f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         top.addView(titleLabel, LinearLayout.LayoutParams(0, 40, 1f))
-        speedButton = compactTool("1× ▾") { showSpeedPicker() }
+        speedButton = compactTool("1× ▾") { showSpeedPicker() }.apply {
+            contentDescription = "Playback speed menu"
+            minWidth = dp(56)
+            isClickable = true
+            isFocusable = true
+        }
         top.addView(speedButton)
-        shareButton = compactTool("Share") { shareCurrentVideo() }
+        shareButton = compactTool("Share") { shareCurrentVideo() }.apply {
+            contentDescription = "Share current video"
+            minWidth = dp(64)
+            isClickable = true
+            isFocusable = true
+        }
         top.addView(shareButton)
         // Keep title, speed and share at the TOP of the video, separate from playback controls.
         root.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
@@ -245,7 +255,13 @@ class NativeVideoPlayerActivity : Activity() {
             v.setPadding(2, 4, 2, 4)
             middle.addView(v)
         }
-        addIcon(android.R.drawable.ic_media_previous) { controller?.let { if (it.hasPreviousMediaItem()) it.seekToPreviousMediaItem() else it.seekTo(0) } }
+        addIcon(android.R.drawable.ic_media_previous) {
+            controller?.let { p ->
+                if (p.hasPreviousMediaItem()) p.seekToPreviousMediaItem()
+                else if (p.currentPosition > 3000L) p.seekTo(0L)
+                else Toast.makeText(this, "This is the first video in the queue", Toast.LENGTH_SHORT).show()
+            } ?: Toast.makeText(this, "Player is not ready yet", Toast.LENGTH_SHORT).show()
+        }
         addTool("↶5") { controller?.let { it.seekTo((it.currentPosition - 5_000).coerceAtLeast(0)) } }
         playButton = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_media_play); setColorFilter(Color.WHITE); setBackgroundColor(Color.TRANSPARENT)
@@ -253,12 +269,30 @@ class NativeVideoPlayerActivity : Activity() {
         }
         middle.addView(playButton, LinearLayout.LayoutParams(0, 44, 1f))
         addTool("15↷") { controller?.let { it.seekTo((it.currentPosition + 15_000).coerceAtMost(it.duration.takeIf { d -> d > 0 } ?: Long.MAX_VALUE)) } }
-        addIcon(android.R.drawable.ic_media_next) { controller?.let { p -> if (p.hasNextMediaItem()) p.seekToNextMediaItem() else Toast.makeText(this, "No next video in playback queue", Toast.LENGTH_SHORT).show() } }
+        addIcon(android.R.drawable.ic_media_next) {
+            controller?.let { p ->
+                if (p.hasNextMediaItem()) p.seekToNextMediaItem()
+                else Toast.makeText(this, "No next video in playback queue", Toast.LENGTH_SHORT).show()
+            } ?: Toast.makeText(this, "Player is not ready yet", Toast.LENGTH_SHORT).show()
+        }
         fitButton = compactTool("Fit") { toggleFit() }; middle.addView(fitButton, LinearLayout.LayoutParams(0, 44, 1f))
         rotateButton = compactTool("↻") { toggleOrientation() }; middle.addView(rotateButton, LinearLayout.LayoutParams(0, 44, 1f))
-        lockButton = compactTool("🔓") { locked = !locked; lockButton.text = if (locked) "🔒" else "🔓"; if (locked) { controls.visibility = View.VISIBLE; handler.removeCallbacks(hideControls) } else showControls() }
+        lockButton = compactTool("🔓") {
+            locked = !locked
+            lockButton.text = if (locked) "🔒" else "🔓"
+            lockButton.contentDescription = if (locked) "Unlock video controls" else "Lock video controls"
+            if (locked) {
+                controls.visibility = View.VISIBLE
+                handler.removeCallbacks(hideControls)
+                Toast.makeText(this, "Controls locked", Toast.LENGTH_SHORT).show()
+            } else {
+                showControls()
+                Toast.makeText(this, "Controls unlocked", Toast.LENGTH_SHORT).show()
+            }
+        }
+        lockButton.contentDescription = "Lock video controls"
         middle.addView(lockButton, LinearLayout.LayoutParams(0, 44, 1f))
-        addTool("Vol") { controller?.let { p -> volumeMuted = !volumeMuted; p.volume = if (volumeMuted) 0f else 1f } }
+        addTool(if (volumeMuted) "🔇" else "Vol") { showVolumePicker() }
         controls.addView(middle)
 
         val seekRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
@@ -303,6 +337,62 @@ class NativeVideoPlayerActivity : Activity() {
     private fun timeLabel(value: String) = TextView(this).apply { text = value; setTextColor(Color.WHITE); textSize = 12f; setPadding(5, 0, 5, 0) }
     private fun toggleControls() { if (controls.visibility == View.VISIBLE) { if (!locked) controls.visibility = View.GONE } else showControls() }
     private fun showControls() { controls.visibility = View.VISIBLE; handler.removeCallbacks(hideControls); if (!locked) handler.postDelayed(hideControls, 5000) }
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun showVolumePicker() {
+        val p = controller
+        if (p == null) {
+            Toast.makeText(this, "Player is not ready yet", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(12), dp(22), dp(8))
+        }
+        val label = TextView(this).apply {
+            text = if (volumeMuted) "Volume: muted" else "Volume: ${(p.volume * 100).toInt()}%"
+            textSize = 14f
+        }
+        panel.addView(label)
+        val slider = SeekBar(this).apply {
+            max = 100
+            progress = if (volumeMuted) 0 else (p.volume * 100).toInt().coerceIn(0, 100)
+        }
+        panel.addView(slider)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Video volume")
+            .setView(panel)
+            .setNegativeButton("Mute", null)
+            .setPositiveButton("Done", null)
+            .create()
+        slider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onStartTrackingTouch(sb: SeekBar) {}
+            override fun onProgressChanged(sb: SeekBar, value: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                val current = controller ?: return
+                current.volume = value / 100f
+                volumeMuted = value == 0
+                label.text = if (volumeMuted) "Volume: muted" else "Volume: $value%"
+            }
+            override fun onStopTrackingTouch(sb: SeekBar) {}
+        })
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
+                controller?.volume = 0f
+                volumeMuted = true
+                slider.progress = 0
+                label.text = "Volume: muted"
+            }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (slider.progress > 0) volumeMuted = false
+                dialog.dismiss()
+                showControls()
+            }
+        }
+        dialog.show()
+        showControls()
+    }
+
     private fun shareCurrentVideo() {
         val uri = videoUri ?: run { Toast.makeText(this, "Video URI unavailable", Toast.LENGTH_SHORT).show(); return }
         try {
@@ -326,8 +416,13 @@ class NativeVideoPlayerActivity : Activity() {
             .setTitle("Playback speed")
             .setSingleChoiceItems(labels, values.indexOf(speed).coerceAtLeast(0)) { dialog, which ->
                 speed = values[which]
-                controller?.setPlaybackSpeed(speed)
-                speedButton.text = if (speed == 1f) "1× ▾" else "${speed}× ▾"
+                val active = controller
+                if (active == null) {
+                    Toast.makeText(this, "Player is not ready yet", Toast.LENGTH_SHORT).show()
+                } else {
+                    active.setPlaybackSpeed(speed)
+                    speedButton.text = if (speed == 1f) "1× ▾" else "${speed}× ▾"
+                }
                 dialog.dismiss()
                 showControls()
             }
