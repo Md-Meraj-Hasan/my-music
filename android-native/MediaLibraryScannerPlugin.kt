@@ -140,6 +140,24 @@ class MediaLibraryScannerPlugin : Plugin() {
             val intent = android.content.Intent(context, NativeVideoPlayerActivity::class.java).apply {
                 putExtra(NativeVideoPlayerActivity.EXTRA_URI, uri.toString())
                 putExtra(NativeVideoPlayerActivity.EXTRA_TITLE, call.getString("name", "Video") ?: "Video")
+                val queue = call.getArray("queue")
+                val queueUris = ArrayList<String>()
+                val queueTitles = ArrayList<String>()
+                val queueMimes = ArrayList<String>()
+                if (queue != null) {
+                    for (i in 0 until queue.length()) {
+                        val entry = queue.optJSONObject(i) ?: continue
+                        val qUri = entry.optString("uri", "")
+                        if (qUri.isNotBlank()) {
+                            queueUris.add(qUri)
+                            queueTitles.add(entry.optString("name", "Video"))
+                            queueMimes.add(entry.optString("mimeType", "video/*"))
+                        }
+                    }
+                }
+                putStringArrayListExtra(NativeVideoPlayerActivity.EXTRA_QUEUE_URIS, queueUris)
+                putStringArrayListExtra(NativeVideoPlayerActivity.EXTRA_QUEUE_TITLES, queueTitles)
+                putStringArrayListExtra(NativeVideoPlayerActivity.EXTRA_QUEUE_MIMES, queueMimes)
                 addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 clipData = android.content.ClipData.newUri(context.contentResolver, "video", uri)
             }

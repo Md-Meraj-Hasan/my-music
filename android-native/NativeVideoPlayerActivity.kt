@@ -1,6 +1,7 @@
 package com.meraj.mediaplayer
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.ActivityInfo
@@ -167,11 +168,28 @@ class NativeVideoPlayerActivity : Activity() {
                     else -> null
                 }
                 val mime = providerMime?.takeIf { it.startsWith("video/") } ?: fallbackMime
-                val itemBuilder = MediaItem.Builder().setMediaId(uri.toString()).setUri(uri)
-                    .setMediaMetadata(MediaMetadata.Builder().setTitle(videoTitle).build())
-                if (mime != null) itemBuilder.setMimeType(mime)
-                val item = itemBuilder.build()
-                c.setMediaItem(item)
+                val queueUris = intent.getStringArrayListExtra(EXTRA_QUEUE_URIS).orEmpty()
+                val queueTitles = intent.getStringArrayListExtra(EXTRA_QUEUE_TITLES).orEmpty()
+                val queueMimes = intent.getStringArrayListExtra(EXTRA_QUEUE_MIMES).orEmpty()
+                val mediaItems = ArrayList<MediaItem>()
+                for (i in queueUris.indices) {
+                    val qUri = Uri.parse(queueUris[i])
+                    val qTitle = queueTitles.getOrNull(i) ?: qUri.lastPathSegment ?: "Video"
+                    val qMime = queueMimes.getOrNull(i)?.takeIf { it.startsWith("video/") }
+                        ?: try { contentResolver.getType(qUri)?.takeIf { it.startsWith("video/") } } catch (_: Exception) { null }
+                    val builder = MediaItem.Builder().setMediaId(qUri.toString()).setUri(qUri)
+                        .setMediaMetadata(MediaMetadata.Builder().setTitle(qTitle).build())
+                    if (qMime != null && qMime != "video/*") builder.setMimeType(qMime)
+                    mediaItems.add(builder.build())
+                }
+                if (mediaItems.isEmpty()) {
+                    val builder = MediaItem.Builder().setMediaId(uri.toString()).setUri(uri)
+                        .setMediaMetadata(MediaMetadata.Builder().setTitle(videoTitle).build())
+                    if (mime != null) builder.setMimeType(mime)
+                    mediaItems.add(builder.build())
+                }
+                val selectedIndex = mediaItems.indexOfFirst { it.mediaId == uri.toString() }.coerceAtLeast(0)
+                c.setMediaItems(mediaItems, selectedIndex, 0L)
                 c.setPlaybackSpeed(speed)
                 c.prepare()
                 c.playWhenReady = true
@@ -201,7 +219,7 @@ class NativeVideoPlayerActivity : Activity() {
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
         val title = TextView(this).apply { text = videoTitle; setTextColor(Color.WHITE); textSize = 14f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         top.addView(title, LinearLayout.LayoutParams(0, 40, 1f))
-        speedButton = compactTool("1×") { cycleSpeed() }
+        speedButton = compactTool("1× ▾") { showSpeedPicker() }
         top.addView(speedButton)
         shareButton = compactTool("Share") { shareCurrentVideo() }
         top.addView(shareButton)
@@ -293,7 +311,22 @@ class NativeVideoPlayerActivity : Activity() {
     }
     private fun toggleFit() { fitMode = (fitMode + 1) % 3; playerView.resizeMode = when (fitMode) { 1 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM; 2 -> AspectRatioFrameLayout.RESIZE_MODE_FILL; else -> AspectRatioFrameLayout.RESIZE_MODE_FIT }; fitButton.text = when (fitMode) { 1 -> "Zoom"; 2 -> "Fill"; else -> "Fit" }; showControls() }
     private fun toggleOrientation() { requestedOrientation = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE; showControls() }
-    private fun cycleSpeed() { speed = when { speed < 0.75f -> 0.75f; speed < 1f -> 1f; speed < 1.25f -> 1.25f; speed < 1.5f -> 1.5f; speed < 2f -> 2f; else -> 0.5f }; controller?.setPlaybackSpeed(speed); speedButton.text = String.format(Locale.US, "%.2f×", speed).replace(".00", "").replace(".50", ".5"); showControls() }
+    private fun showSpeedPicker() {
+        val values = arrayOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
+        val labels = values.map { if (it == 1f) "1× Normal" else "${it}×" }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Playback speed")
+            .setSingleChoiceItems(labels, values.indexOf(speed).coerceAtLeast(0)) { dialog, which ->
+                speed = values[which]
+                controller?.setPlaybackSpeed(speed)
+                speedButton.text = if (speed == 1f) "1× ▾" else "${speed}× ▾"
+                dialog.dismiss()
+                showControls()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+        showControls()
+    }
     private fun snapshotQueue(p: MediaController) { if (queueSnapshotTaken) return; previousQueue = (0 until p.mediaItemCount).map { p.getMediaItemAt(it) }; previousIndex = p.currentMediaItemIndex.coerceAtLeast(0); previousPosition = p.currentPosition.coerceAtLeast(0L); previousPlayWhenReady = p.playWhenReady; queueSnapshotTaken = true }
     private fun formatTime(ms: Long): String { val s = (ms.coerceAtLeast(0L) / 1000); return if (s >= 3600) String.format(Locale.US, "%d:%02d:%02d", s/3600, (s%3600)/60, s%60) else String.format(Locale.US, "%02d:%02d", s/60, s%60) }
     override fun onStop() { super.onStop() }
@@ -306,5 +339,11 @@ class NativeVideoPlayerActivity : Activity() {
         controllerFuture?.let { MediaController.releaseFuture(it) }; controllerFuture = null; controller = null
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); if (isFinishing) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT; super.onDestroy()
     }
-    companion object { const val EXTRA_URI = "com.meraj.mediaplayer.VIDEO_URI"; const val EXTRA_TITLE = "com.meraj.mediaplayer.VIDEO_TITLE" }
+    companion object {
+        const val EXTRA_URI = "com.meraj.mediaplayer.VIDEO_URI"
+        const val EXTRA_TITLE = "com.meraj.mediaplayer.VIDEO_TITLE"
+        const val EXTRA_QUEUE_URIS = "com.meraj.mediaplayer.VIDEO_QUEUE_URIS"
+        const val EXTRA_QUEUE_TITLES = "com.meraj.mediaplayer.VIDEO_QUEUE_TITLES"
+        const val EXTRA_QUEUE_MIMES = "com.meraj.mediaplayer.VIDEO_QUEUE_MIMES"
+    }
 }
