@@ -178,3 +178,51 @@ body.video-mode .video-player-embed { width: 100%; height: 100dvh; min-height: 1
 .sharebtn small{font-size:9px;line-height:1.2;font-weight:700}
 .sharebtn:active{transform:scale(.96);filter:brightness(1.15)}
 @media(max-width:380px){.topactions{gap:5px}.sharebtn{min-width:36px;padding-inline:4px}.scanbtn{padding-inline:8px}}
+
+/* FINAL VIDEO PAGE SIZE FIX: let the active page and iframe share the available
+   content height; avoid percentage heights without a definite parent height. */
+#pages { min-height: 0; }
+#videoPlayer.page.active,
+.video-embed-page.page.active {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+#videoPlayer .video-player-embed,
+.video-embed-page .video-player-embed {
+  display: block !important;
+  flex: 1 1 0 !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  align-self: stretch !important;
+  box-sizing: border-box !important;
+}
+body.video-mode #videoPlayer.page.active .video-player-embed {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+
+/* Final viewport correction: the video library must occupy the whole WebView area. */
+html, body { min-height:100%; }
+body.video-mode, body.video-mode .app { width:100% !important; height:100dvh !important; min-height:100dvh !important; max-height:100dvh !important; overflow:hidden !important; }
+body.video-mode main { width:100% !important; height:auto !important; min-height:0 !important; max-height:none !important; flex:1 1 0 !important; padding:0 !important; margin:0 !important; overflow:hidden !important; display:flex !important; flex-direction:column !important; }
+body.video-mode #pages { width:100% !important; height:100% !important; min-height:0 !important; max-height:none !important; flex:1 1 0 !important; padding:0 !important; margin:0 !important; overflow:hidden !important; display:flex !important; flex-direction:column !important; }
+body.video-mode #videoPlayer.page.active { width:100% !important; height:100% !important; min-height:0 !important; max-height:none !important; flex:1 1 0 !important; padding:0 !important; margin:0 !important; border:0 !important; border-radius:0 !important; overflow:hidden !important; display:flex !important; flex-direction:column !important; }
+body.video-mode #videoPlayer .video-embed-page { width:100% !important; height:100% !important; min-height:0 !important; max-height:none !important; flex:1 1 0 !important; padding:0 !important; margin:0 !important; overflow:hidden !important; display:flex !important; flex-direction:column !important; }
+body.video-mode #videoPlayer .video-player-embed { width:100% !important; height:100% !important; min-height:0 !important; max-height:none !important; flex:1 1 0 !important; padding:0 !important; margin:0 !important; border:0 !important; border-radius:0 !important; overflow:hidden !important; display:block !important; }
+body.video-mode #videoPlayer.page.active { display:flex !important; flex-direction:column !important; }
+
+/* v2 verified layout correction: preserve the shell's flex sizing and keep iframe inside the available content area. */
+body.video-mode .app { display:flex !important; flex-direction:column !important; height:100dvh !important; min-height:0 !important; max-height:100dvh !important; overflow:hidden !important; }
+body.video-mode main { min-height:0 !important; }
+body.video-mode #pages { min-height:0 !important; }

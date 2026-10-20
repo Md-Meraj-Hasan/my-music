@@ -92,8 +92,12 @@ class MerajMediaPlayerPlugin : Plugin() {
                 if (uri.isBlank()) continue
                 val title = item.optString("title", "Local audio")
                 val artist = item.optString("artist", "Unknown artist")
-                mediaItems.add(MediaItem.Builder().setMediaId(item.optString("id", uri)).setUri(Uri.parse(uri))
-                    .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artist).build()).build())
+                val parsedUri = Uri.parse(uri)
+                val builder = MediaItem.Builder().setMediaId(item.optString("id", uri)).setUri(parsedUri)
+                    .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artist).build())
+                val mime = try { context.contentResolver.getType(parsedUri) } catch (_: Exception) { null }
+                if (!mime.isNullOrBlank()) builder.setMimeType(mime)
+                mediaItems.add(builder.build())
             }
             if (mediaItems.isEmpty()) { call.reject("No playable local media URIs were supplied."); return@withController }
             c.setMediaItems(mediaItems, startIndex.coerceIn(0, mediaItems.lastIndex), 0L)
@@ -119,8 +123,12 @@ class MerajMediaPlayerPlugin : Plugin() {
         val uri = call.getString("uri")
         if (uri.isNullOrBlank()) { call.reject("A local content URI is required."); return }
         withController(call) { c ->
-            c.setMediaItem(MediaItem.Builder().setUri(Uri.parse(uri)).build())
-            c.prepare(); c.play()
+            val parsedUri = Uri.parse(uri)
+            val builder = MediaItem.Builder().setUri(parsedUri)
+            val mime = try { context.contentResolver.getType(parsedUri) } catch (_: Exception) { null }
+            if (!mime.isNullOrBlank()) builder.setMimeType(mime)
+            c.setMediaItem(builder.build())
+            c.prepare(); c.playWhenReady = true; c.play()
             call.resolve(JSObject().put("accepted", true))
         }
     }

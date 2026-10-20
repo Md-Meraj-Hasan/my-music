@@ -70,9 +70,11 @@ class NativeVideoPlayerActivity : Activity() {
             val p = controller
             if (p != null && !seeking) {
                 val duration = p.duration.takeIf { it > 0L } ?: 0L
-                seekBar.max = duration.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-                seekBar.progress = p.currentPosition.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-                positionLabel.text = formatTime(p.currentPosition)
+                if (!seeking) {
+                    seekBar.max = duration.coerceAtMost(Int.MAX_VALUE.toLong()).toInt().coerceAtLeast(1)
+                    seekBar.progress = p.currentPosition.coerceAtMost(seekBar.max.toLong()).toInt()
+                    positionLabel.text = formatTime(p.currentPosition)
+                }
                 durationLabel.text = formatTime(duration)
                 playButton.setImageResource(android.R.drawable.ic_media_pause.takeIf { p.isPlaying } ?: android.R.drawable.ic_media_play)
             }
@@ -127,7 +129,9 @@ class NativeVideoPlayerActivity : Activity() {
         setContentView(root)
         root.setOnClickListener { toggleControls() }
         root.setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_UP) {
+            if (event.action == MotionEvent.ACTION_UP && !isPinching) {
+                // Locked mode prevents background taps from hiding/showing the control panel.
+                if (locked) return@setOnTouchListener true
                 val now = System.currentTimeMillis()
                 if (now - lastTap < 300) { toggleFit(); lastTap = 0L } else { lastTap = now; toggleControls() }
             }
@@ -148,11 +152,30 @@ class NativeVideoPlayerActivity : Activity() {
                 playerView.player = c
                 snapshotQueue(c)
                 val uri = videoUri ?: return@addListener
-                val item = MediaItem.Builder().setMediaId(uri.toString()).setUri(uri)
-                    .setMediaMetadata(MediaMetadata.Builder().setTitle(videoTitle).build()).build()
+                // MediaStore document/content URIs often have no file extension. Give
+                // Media3 the provider MIME type explicitly so it does not mis-detect
+                // large local videos as an unknown/unsupported media source.
+                val providerMime = try { contentResolver.getType(uri) } catch (_: Exception) { null }
+                val fallbackMime = when (uri.lastPathSegment?.substringAfterLast('.', "")?.lowercase(Locale.US)) {
+                    "mp4", "m4v" -> "video/mp4"
+                    "mkv" -> "video/x-matroska"
+                    "webm" -> "video/webm"
+                    "mov" -> "video/quicktime"
+                    "3gp" -> "video/3gpp"
+                    "ts", "m2ts" -> "video/mp2t"
+                    "avi" -> "video/avi"
+                    else -> null
+                }
+                val mime = providerMime?.takeIf { it.startsWith("video/") } ?: fallbackMime
+                val itemBuilder = MediaItem.Builder().setMediaId(uri.toString()).setUri(uri)
+                    .setMediaMetadata(MediaMetadata.Builder().setTitle(videoTitle).build())
+                if (mime != null) itemBuilder.setMimeType(mime)
+                val item = itemBuilder.build()
                 c.setMediaItem(item)
                 c.setPlaybackSpeed(speed)
-                c.prepare(); c.play()
+                c.prepare()
+                c.playWhenReady = true
+                c.play()
                 val l = object : Player.Listener {
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                         android.util.Log.e("NiceMultimediaVideo", "Shared Media3 playback failed: ${error.errorCodeName}", error)
@@ -185,7 +208,7 @@ class NativeVideoPlayerActivity : Activity() {
         controls.addView(top)
 
         // All playback/action icons stay in one compact horizontal row.
-        val middle = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL; weightSum = 9f }
+        val middle = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL; weightSum = 9f; baselineAligned = false }
         fun addTool(label: String, action: () -> Unit) {
             val v = compactTool(label, action)
             middle.addView(v, LinearLayout.LayoutParams(0, 44, 1f))
@@ -193,7 +216,7 @@ class NativeVideoPlayerActivity : Activity() {
         fun addIcon(icon: Int, action: () -> Unit) {
             val v = iconButton(icon, action)
             v.layoutParams = LinearLayout.LayoutParams(0, 44, 1f)
-            v.setPadding(4, 4, 4, 4)
+            v.setPadding(2, 4, 2, 4)
             middle.addView(v)
         }
         addIcon(android.R.drawable.ic_media_previous) { controller?.let { if (it.hasPreviousMediaItem()) it.seekToPreviousMediaItem() else it.seekTo(0) } }
@@ -204,7 +227,7 @@ class NativeVideoPlayerActivity : Activity() {
         }
         middle.addView(playButton, LinearLayout.LayoutParams(0, 44, 1f))
         addTool("15↷") { controller?.let { it.seekTo((it.currentPosition + 15_000).coerceAtMost(it.duration.takeIf { d -> d > 0 } ?: Long.MAX_VALUE)) } }
-        addIcon(android.R.drawable.ic_media_next) { controller?.let { if (it.hasNextMediaItem()) it.seekToNextMediaItem() } }
+        addIcon(android.R.drawable.ic_media_next) { controller?.let { p -> if (p.hasNextMediaItem()) p.seekToNextMediaItem() else Toast.makeText(this, "No next video in playback queue", Toast.LENGTH_SHORT).show() } }
         fitButton = compactTool("Fit") { toggleFit() }; middle.addView(fitButton, LinearLayout.LayoutParams(0, 44, 1f))
         rotateButton = compactTool("↻") { toggleOrientation() }; middle.addView(rotateButton, LinearLayout.LayoutParams(0, 44, 1f))
         lockButton = compactTool("🔓") { locked = !locked; lockButton.text = if (locked) "🔒" else "🔓"; if (locked) { controls.visibility = View.VISIBLE; handler.removeCallbacks(hideControls) } else showControls() }
@@ -219,7 +242,15 @@ class NativeVideoPlayerActivity : Activity() {
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onStartTrackingTouch(sb: SeekBar) { seeking = true; handler.removeCallbacks(hideControls) }
                 override fun onProgressChanged(sb: SeekBar, value: Int, fromUser: Boolean) { if (fromUser) positionLabel.text = formatTime(value.toLong()) }
-                override fun onStopTrackingTouch(sb: SeekBar) { controller?.seekTo(sb.progress.toLong()); seeking = false; showControls() }
+                override fun onStopTrackingTouch(sb: SeekBar) {
+                    val target = sb.progress.toLong().coerceAtLeast(0L)
+                    controller?.let { p ->
+                        val duration = p.duration
+                        p.seekTo(if (duration > 0L) target.coerceAtMost(duration) else target)
+                    }
+                    seeking = false
+                    showControls()
+                }
             })
         }
         seekRow.addView(seekBar, LinearLayout.LayoutParams(0, 34, 1f)); durationLabel = timeLabel("00:00"); seekRow.addView(durationLabel)
@@ -229,8 +260,8 @@ class NativeVideoPlayerActivity : Activity() {
     }
 
     private fun compactTool(label: String, action: () -> Unit): TextView = TextView(this).apply {
-        text = label; textSize = 12f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
-        setPadding(4, 4, 4, 4); minWidth = 0
+        text = label; textSize = 12f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; maxLines = 1; includeFontPadding = false
+        setPadding(2, 4, 2, 4); minWidth = 0
         setOnClickListener { action(); showControls() }
     }
 
