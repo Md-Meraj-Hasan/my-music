@@ -966,3 +966,39 @@ body.folders-view #player-screen .video-library-toolbar .library-tabs { flex:1 1
     margin: 0 !important;
   }
 }
+
+
+/* Browser-preview-matched video controls: keep the existing native bridge and library intact. */
+#video-frame { background:#000!important; position:relative!important; overflow:hidden!important; }
+#video-element { background:#000!important; object-fit:contain; }
+#video-overlay-controls.overlay-on-video { position:absolute!important; inset:0!important; width:100%!important; height:100%!important; display:flex!important; flex-direction:column!important; justify-content:space-between!important; padding:0!important; border:0!important; border-radius:0!important; background:transparent!important; color:#fff!important; z-index:8!important; pointer-events:none; }
+#video-overlay-controls.overlay-on-video.hidden { display:none!important; }
+#video-overlay-controls .video-overlay-top { display:flex!important; align-items:center!important; justify-content:space-between!important; gap:12px!important; width:100%!important; min-height:54px!important; padding:7px 14px!important; background:rgba(5,15,17,.58)!important; border-bottom:1px solid rgba(121,226,208,.14)!important; pointer-events:auto!important; }
+#video-overlay-title { overflow:hidden!important; text-overflow:ellipsis!important; white-space:nowrap!important; font-size:14px!important; font-weight:650!important; }
+#video-overlay-controls .video-speed-wrap { margin-left:auto!important; }
+#video-overlay-speed, #video-overlay-share { min-height:40px!important; border:1px solid #ffffff22!important; background:#111a1bc4!important; color:#fff!important; border-radius:22px!important; padding:7px 12px!important; }
+#video-overlay-speed { display:flex!important; align-items:center!important; gap:7px!important; }
+#video-overlay-speed .speedometer-icon { width:20px!important; height:20px!important; }
+.preview-share-button { pointer-events:auto!important; flex:0 0 auto!important; font-size:20px!important; }
+#video-overlay-controls .video-overlay-bottom { width:100%!important; margin-top:auto!important; padding:8px 14px 10px!important; display:flex!important; flex-direction:column!important; gap:8px!important; background:linear-gradient(transparent,rgba(0,0,0,.58))!important; pointer-events:auto!important; }
+#video-overlay-controls .video-overlay-time { display:flex!important; justify-content:space-between!important; color:#fff!important; font-size:12px!important; text-shadow:0 1px 4px #000!important; }
+#video-seekbar { width:100%!important; height:18px!important; margin:0!important; accent-color:#f0448a!important; }
+#video-overlay-controls .video-overlay-actions { display:flex!important; align-items:center!important; justify-content:space-between!important; flex-wrap:nowrap!important; gap:clamp(3px,1vw,10px)!important; width:100%!important; }
+#video-overlay-controls .video-overlay-actions button { width:38px!important; height:38px!important; min-width:30px!important; flex:0 1 42px!important; border:1px solid #ffffff1f!important; border-radius:50%!important; background:rgba(255,255,255,.09)!important; color:#fff!important; font-size:20px!important; display:grid!important; place-items:center!important; padding:0!important; }
+#video-overlay-controls .video-overlay-actions #video-overlay-play { width:48px!important; height:48px!important; flex-basis:48px!important; font-size:25px!important; border-radius:18px!important; background:rgba(7,13,15,.42)!important; }
+#video-preview-thumbnails { display:flex!important; align-items:center!important; gap:9px!important; width:100%!important; overflow-x:auto!important; overscroll-behavior-x:contain!important; scrollbar-width:thin!important; scrollbar-color:#79e2d088 transparent!important; padding:4px 3px 7px!important; }
+.video-preview-thumb { flex:0 0 82px!important; width:82px!important; height:48px!important; border-radius:10px!important; border:1px solid #ffffff38!important; background:#202626 center/cover no-repeat!important; color:#fff!important; padding:0!important; position:relative!important; overflow:hidden!important; }
+.video-preview-thumb.selected { outline:2px solid #fff!important; outline-offset:1px!important; }
+.video-preview-thumb .thumb-label { position:absolute!important; left:0!important; right:0!important; bottom:0!important; padding:3px 4px!important; background:#000a!important; font-size:9px!important; line-height:1.2!important; white-space:nowrap!important; overflow:hidden!important; text-overflow:ellipsis!important; }
+.video-preview-thumb .thumb-film-icon { display:none!important; }
+#video-frame.controls-locked #video-overlay-controls { opacity:0!important; pointer-events:none!important; }
+.video-unlock-tap { position:absolute!important; inset:0!important; width:100%!important; height:100%!important; z-index:12!important; border:0!important; background:transparent!important; padding:0!important; }
+.video-locked-badge { position:absolute!important; left:14px!important; bottom:16px!important; z-index:13!important; border-radius:50%!important; padding:9px!important; background:#101718cc!important; border:1px solid #ffffff33!important; color:#fff!important; pointer-events:none!important; }
+@media(max-width:650px) {
+ #video-overlay-controls .video-overlay-top { min-height:50px!important; padding:6px 9px!important; }
+ #video-overlay-controls .video-overlay-bottom { padding:6px 8px max(8px,env(safe-area-inset-bottom))!important; gap:6px!important; }
+ #video-overlay-controls .video-overlay-actions { gap:3px!important; }
+ #video-overlay-controls .video-overlay-actions button { width:34px!important; height:34px!important; min-width:28px!important; font-size:18px!important; }
+ #video-overlay-controls .video-overlay-actions #video-overlay-play { width:42px!important; height:42px!important; flex-basis:42px!important; font-size:23px!important; }
+ .video-preview-thumb { flex-basis:76px!important; width:76px!important; height:44px!important; }
+}

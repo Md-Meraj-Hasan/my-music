@@ -1,6 +1,7 @@
 package com.meraj.mediaplayer
 
 import android.app.Activity
+import android.media.AudioManager
 import android.app.AlertDialog
 import android.content.ComponentName
 import android.content.Intent
@@ -39,6 +40,8 @@ class NativeVideoPlayerActivity : Activity() {
     private lateinit var controls: LinearLayout
     private lateinit var topBar: LinearLayout
     private lateinit var gestureIndicator: View
+    private lateinit var unlockOverlay: FrameLayout
+    private lateinit var lockedBadge: TextView
     private lateinit var playButton: ImageButton
     private lateinit var seekBar: SeekBar
     private lateinit var positionLabel: TextView
@@ -48,7 +51,12 @@ class NativeVideoPlayerActivity : Activity() {
     private lateinit var rotateButton: TextView
     private lateinit var lockButton: TextView
     private lateinit var shareButton: TextView
-    private lateinit var volumeButton: TextView
+    private lateinit var volumeButton: ImageButton
+    private lateinit var bottomToolsRow: LinearLayout
+    private lateinit var thumbnailStrip: LinearLayout
+    private val thumbnailViews = mutableListOf<View>()
+    private var queueUrisForThumbs: ArrayList<String> = arrayListOf()
+    private var queueTitlesForThumbs: ArrayList<String> = arrayListOf()
     private lateinit var titleLabel: TextView
     private lateinit var scaleDetector: ScaleGestureDetector
     private var pinchScale = 1f
@@ -77,7 +85,7 @@ class NativeVideoPlayerActivity : Activity() {
     private var activeSideGesture = 0 // 0=none, 1=brightness, 2=volume
     private var sideGestureAdjusted = false
     private val handler = Handler(Looper.getMainLooper())
-    private val hideControls = Runnable { if (!locked) { controls.visibility = View.GONE; topBar.visibility = View.GONE } }
+    private val hideControls = Runnable { if (!locked) { controls.visibility = View.GONE; topBar.visibility = View.GONE; bottomToolsRow.visibility = View.GONE } }
     private val progress = object : Runnable {
         override fun run() {
             val p = controller
@@ -146,7 +154,7 @@ class NativeVideoPlayerActivity : Activity() {
                 MotionEvent.ACTION_DOWN -> {
                     gestureStartX = event.x
                     gestureStartY = event.y
-                    gestureStartVolume = controller?.volume ?: 1f
+                    gestureStartVolume = systemMusicVolumeLevel()
                     val currentBrightness = window.attributes.screenBrightness
                     gestureStartBrightness = if (currentBrightness in 0.01f..1f) currentBrightness else 0.5f
                     activeSideGesture = 0
@@ -173,9 +181,9 @@ class NativeVideoPlayerActivity : Activity() {
                             updateGestureIndicator(brightness, activeSideGesture)
                         } else if (activeSideGesture == 2) {
                             val newVolume = (gestureStartVolume + delta).coerceIn(0f, 1f)
-                            controller?.volume = newVolume
+                            setSystemMusicVolumeLevel(newVolume)
                             volumeMuted = newVolume <= 0.001f
-                            if (::volumeButton.isInitialized) volumeButton.text = if (volumeMuted) "🔇" else "🔊"
+                            if (::volumeButton.isInitialized) volumeButton.alpha = if (volumeMuted) 0.65f else 1f
                             updateGestureIndicator(newVolume, activeSideGesture)
                         }
                     }
@@ -193,12 +201,16 @@ class NativeVideoPlayerActivity : Activity() {
             }
             true
         }
-        buildControls()
-        setContentView(root)
         val rawUri = intent.getStringExtra(EXTRA_URI)
         if (rawUri.isNullOrBlank()) { finish(); return }
         videoUri = Uri.parse(rawUri)
         videoTitle = intent.getStringExtra(EXTRA_TITLE) ?: videoUri?.lastPathSegment ?: "Video"
+        queueUrisForThumbs = intent.getStringArrayListExtra(EXTRA_QUEUE_URIS) ?: arrayListOf()
+        queueTitlesForThumbs = intent.getStringArrayListExtra(EXTRA_QUEUE_TITLES) ?: arrayListOf()
+        if (queueUrisForThumbs.isEmpty()) queueUrisForThumbs.add(videoUri.toString())
+        if (queueTitlesForThumbs.isEmpty()) queueTitlesForThumbs.add(videoTitle)
+        buildControls()
+        setContentView(root)
         val token = SessionToken(this, ComponentName(this, MerajPlaybackService::class.java))
         val future = MediaController.Builder(this, token).buildAsync()
         controllerFuture = future
@@ -261,7 +273,17 @@ class NativeVideoPlayerActivity : Activity() {
                         val current = mediaItem ?: return
                         videoUri = current.localConfiguration?.uri ?: runCatching { Uri.parse(current.mediaId) }.getOrNull()
                         videoTitle = current.mediaMetadata.title?.toString()?.takeIf { it.isNotBlank() } ?: videoUri?.lastPathSegment ?: "Video"
-                        runOnUiThread { titleLabel.text = videoTitle }
+                        runOnUiThread {
+                            titleLabel.text = videoTitle
+                            thumbnailViews.forEachIndexed { index, view ->
+                                val selected = queueUrisForThumbs.getOrNull(index) == videoUri?.toString()
+                                view.background = GradientDrawable().apply {
+                                    cornerRadius = dp(if (selected) 9 else 8).toFloat()
+                                    setColor(Color.argb(120, 30, 35, 40))
+                                    setStroke(dp(if (selected) 2 else 1), if (selected) Color.rgb(74, 224, 205) else Color.argb(150, 255, 255, 255))
+                                }
+                            }
+                        }
                     }
                 }
                 listener = l; c.addListener(l)
@@ -319,23 +341,20 @@ class NativeVideoPlayerActivity : Activity() {
         // next immediately right. Remaining actions are distributed on both sides.
         val middle = LinearLayout(this).apply { minimumHeight = dp(50); orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; weightSum = 2f }
         fun makeIcon(icon: Int, action: () -> Unit): ImageButton = iconButton(icon, action).apply {
-            background = null
+            background = circularToolBackground()
             setColorFilter(Color.WHITE)
-            setPadding(dp(5), dp(5), dp(5), dp(5))
+            setPadding(dp(9), dp(9), dp(9), dp(9))
+            layoutParams = LinearLayout.LayoutParams(dp(42), dp(42))
         }
         fun makeText(label: String, action: () -> Unit): TextView = compactTool(label, action).apply {
             textSize = 15f
             setTextColor(Color.WHITE)
-            background = null
-            setPadding(dp(3), dp(5), dp(3), dp(5))
+            background = circularToolBackground()
+            setPadding(dp(5), dp(5), dp(5), dp(5))
         }
         val leftGroup = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT }
         val rewind = makeText("↶5") { controller?.let { it.seekTo((it.currentPosition - 5_000).coerceAtLeast(0)) } }
-        leftGroup.addView(rewind, LinearLayout.LayoutParams(dp(34), dp(48)))
-        fitButton = makeText("Fit") { toggleFit() }
-        leftGroup.addView(fitButton, LinearLayout.LayoutParams(dp(34), dp(48)))
-        rotateButton = makeText("↻") { toggleOrientation() }
-        leftGroup.addView(rotateButton, LinearLayout.LayoutParams(dp(34), dp(48)))
+        leftGroup.addView(rewind, LinearLayout.LayoutParams(dp(42), dp(42)))
         val previousButton = makeIcon(android.R.drawable.ic_media_previous) {
             controller?.let { p ->
                 if (p.hasPreviousMediaItem()) p.seekToPreviousMediaItem()
@@ -343,7 +362,7 @@ class NativeVideoPlayerActivity : Activity() {
                 else Toast.makeText(this, "This is the first video in the queue", Toast.LENGTH_SHORT).show()
             } ?: Toast.makeText(this, "Player is not ready yet", Toast.LENGTH_SHORT).show()
         }
-        leftGroup.addView(previousButton, LinearLayout.LayoutParams(dp(40), dp(48)))
+        leftGroup.addView(previousButton, LinearLayout.LayoutParams(dp(42), dp(42)))
         middle.addView(leftGroup, LinearLayout.LayoutParams(0, dp(48), 1f))
 
         val rightGroup = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL or Gravity.LEFT }
@@ -351,18 +370,11 @@ class NativeVideoPlayerActivity : Activity() {
             controller?.let { p -> if (p.hasNextMediaItem()) p.seekToNextMediaItem() else Toast.makeText(this, "No next video in playback queue", Toast.LENGTH_SHORT).show() }
                 ?: Toast.makeText(this, "Player is not ready yet", Toast.LENGTH_SHORT).show()
         }
-        rightGroup.addView(nextButton, LinearLayout.LayoutParams(dp(40), dp(48)))
+        rightGroup.addView(nextButton, LinearLayout.LayoutParams(dp(42), dp(42)))
         val forward = makeText("15↷") { controller?.let { it.seekTo((it.currentPosition + 15_000).coerceAtMost(it.duration.takeIf { d -> d > 0 } ?: Long.MAX_VALUE)) } }
-        rightGroup.addView(forward, LinearLayout.LayoutParams(dp(40), dp(48)))
-        lockButton = makeText("🔓") {
-            locked = !locked
-            lockButton.text = if (locked) "🔒" else "🔓"
-            lockButton.contentDescription = if (locked) "Unlock video controls" else "Lock video controls"
-            setControlsLocked(locked)
-            if (locked) { handler.removeCallbacks(hideControls); Toast.makeText(this, "Controls locked — tap lock to unlock", Toast.LENGTH_SHORT).show() }
-            else { showControls(); Toast.makeText(this, "Controls unlocked", Toast.LENGTH_SHORT).show() }
-        }
-        rightGroup.addView(lockButton, LinearLayout.LayoutParams(dp(40), dp(48)))
+        rightGroup.addView(forward, LinearLayout.LayoutParams(dp(42), dp(42)))
+        // Keep only playback navigation around the central Play/Pause. Utility tools
+        // are placed on the same bottom line as the horizontally scrolling thumbnails.
         middle.addView(rightGroup, LinearLayout.LayoutParams(0, dp(48), 1f))
 
         playButton = ImageButton(this).apply {
@@ -377,8 +389,6 @@ class NativeVideoPlayerActivity : Activity() {
         val playSize = dp(44)
         middle.addView(playButton, 1, LinearLayout.LayoutParams(playSize, dp(48)))
         controls.addView(middle, LinearLayout.LayoutParams(-1, dp(50)))
-        // Volume is deliberately removed from the button row; adjust it by swiping vertically on the right half.
-        volumeButton = compactTool("🔊") { showVolumePicker() }
 
         val seekRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
         positionLabel = timeLabel("00:00"); seekRow.addView(positionLabel)
@@ -400,14 +410,189 @@ class NativeVideoPlayerActivity : Activity() {
         }
         seekRow.addView(seekBar, LinearLayout.LayoutParams(0, 34, 1f)); durationLabel = timeLabel("00:00"); seekRow.addView(durationLabel)
         controls.addView(seekRow)
+
+        bottomToolsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(2), dp(8), dp(4))
+            background = null
+        }
+        val utilityTools = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        fun smallTool(icon: Int, description: String, action: () -> Unit): ImageButton = iconButton(icon, action).apply {
+            contentDescription = description
+            background = circularToolBackground()
+            setColorFilter(Color.WHITE)
+            setPadding(dp(6), dp(6), dp(6), dp(6))
+            layoutParams = LinearLayout.LayoutParams(dp(34), dp(34)).apply { rightMargin = dp(3) }
+        }
+        lockButton = compactTool("🔒") {
+            locked = !locked
+            lockButton.text = if (locked) "🔓" else "🔒"
+            lockButton.contentDescription = if (locked) "Unlock video controls" else "Lock video controls"
+            setControlsLocked(locked)
+            if (locked) {
+                handler.removeCallbacks(hideControls)
+                Toast.makeText(this, "Controls locked — tap video to unlock", Toast.LENGTH_SHORT).show()
+            } else {
+                showControls()
+                Toast.makeText(this, "Controls unlocked", Toast.LENGTH_SHORT).show()
+            }
+        }.apply {
+            textSize = 21f; background = circularToolBackground(); setTextColor(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(dp(34), dp(34)).apply { rightMargin = dp(3) }
+        }
+        utilityTools.addView(lockButton)
+        volumeButton = smallTool(android.R.drawable.ic_lock_silent_mode_off, "System media volume") { showVolumePicker() }
+        utilityTools.addView(volumeButton)
+        val displayButton = smallTool(android.R.drawable.ic_menu_crop, "Display mode") { toggleFit() }
+        utilityTools.addView(displayButton)
+        val rotateSmall = smallTool(android.R.drawable.ic_menu_rotate, "Rotate screen") { toggleOrientation() }
+        utilityTools.addView(rotateSmall)
+        bottomToolsRow.addView(utilityTools, LinearLayout.LayoutParams(-2, dp(42)))
+
+        val thumbScroll = android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            clipToPadding = false
+            setPadding(dp(3), 0, dp(2), 0)
+        }
+        thumbnailStrip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        thumbScroll.addView(thumbnailStrip, android.widget.HorizontalScrollView.LayoutParams(-2, dp(48)))
+        bottomToolsRow.addView(thumbScroll, LinearLayout.LayoutParams(0, dp(48), 1f))
+        buildVideoThumbnails()
+
         val controlsParams = FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM)
-        controlsParams.bottomMargin = dp(56)
-        root.addView(controls, controlsParams)
+        controlsParams.bottomMargin = dp(52)
+        root.addView(bottomToolsRow, controlsParams)
+        val mainControlsParams = FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM)
+        mainControlsParams.bottomMargin = dp(100)
+        root.addView(controls, mainControlsParams)
         controls.setOnClickListener { showControls() }
+        bottomToolsRow.setOnClickListener { showControls() }
+
+        // Native equivalent of the approved browser preview's tap-to-unlock layer.
+        // It intercepts touches only while locked; the player and controls work normally otherwise.
+        unlockOverlay = FrameLayout(this).apply {
+            visibility = View.GONE
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                locked = false
+                lockButton.text = "🔒"
+                lockButton.contentDescription = "Lock video controls"
+                setControlsLocked(false)
+                showControls()
+                Toast.makeText(this@NativeVideoPlayerActivity, "Controls unlocked", Toast.LENGTH_SHORT).show()
+            }
+        }
+        lockedBadge = TextView(this).apply {
+            text = "🔒  Tap anywhere to unlock"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(dp(14), dp(9), dp(14), dp(9))
+            background = GradientDrawable().apply {
+                setColor(Color.argb(155, 0, 0, 0))
+                cornerRadius = dp(22).toFloat()
+            }
+        }
+        unlockOverlay.addView(lockedBadge, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        root.addView(unlockOverlay, FrameLayout.LayoutParams(-1, -1))
+    }
+
+    private fun buildVideoThumbnails() {
+        thumbnailStrip.removeAllViews()
+        thumbnailViews.clear()
+        val uris = queueUrisForThumbs
+        val titles = queueTitlesForThumbs
+        if (uris.isEmpty()) {
+            val current = videoUri?.toString()
+            if (current != null) uris.add(current)
+        }
+        uris.forEachIndexed { index, raw ->
+            val uri = runCatching { Uri.parse(raw) }.getOrNull() ?: return@forEachIndexed
+            val item = FrameLayout(this).apply {
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(8).toFloat()
+                    setColor(Color.argb(120, 30, 35, 40))
+                    setStroke(dp(1), Color.argb(150, 255, 255, 255))
+                }
+                setPadding(dp(2), dp(2), dp(2), dp(2))
+                contentDescription = titles.getOrNull(index) ?: uri.lastPathSegment ?: "Video ${index + 1}"
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    val p = controller
+                    if (p != null && index < p.mediaItemCount) {
+                        p.seekToDefaultPosition(index)
+                        p.playWhenReady = true
+                        p.play()
+                        showControls()
+                    } else if (p != null && uri.toString() == videoUri?.toString()) {
+                        p.seekTo(0L); p.play()
+                    } else {
+                        Toast.makeText(this@NativeVideoPlayerActivity, "This video is not in the playback queue", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            val image = android.widget.ImageView(this).apply {
+                scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                background = GradientDrawable().apply { cornerRadius = dp(6).toFloat(); setColor(Color.rgb(24, 28, 32)) }
+                contentDescription = titles.getOrNull(index) ?: "Video thumbnail"
+            }
+            item.addView(image, FrameLayout.LayoutParams(-1, -1))
+            val label = TextView(this).apply {
+                text = titles.getOrNull(index)?.take(1)?.uppercase(Locale.getDefault()) ?: "▶"
+                textSize = 12f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+                background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.argb(145, 0, 0, 0)) }
+                layoutParams = FrameLayout.LayoutParams(dp(20), dp(20), Gravity.BOTTOM or Gravity.RIGHT)
+            }
+            item.addView(label)
+            if (raw == videoUri?.toString()) {
+                item.background = GradientDrawable().apply {
+                    cornerRadius = dp(9).toFloat()
+                    setColor(Color.argb(120, 30, 35, 40))
+                    setStroke(dp(2), Color.rgb(74, 224, 205))
+                }
+            }
+            thumbnailStrip.addView(item, LinearLayout.LayoutParams(dp(76), dp(44)).apply { rightMargin = dp(7) })
+            thumbnailViews.add(item)
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    val bitmap = contentResolver.loadThumbnail(uri, android.util.Size(dp(76), dp(44)), null)
+                    image.setImageBitmap(bitmap)
+                } else {
+                    val retriever = android.media.MediaMetadataRetriever()
+                    try { retriever.setDataSource(this, uri); image.setImageBitmap(retriever.getFrameAtTime(1_000_000L)) } finally { retriever.release() }
+                }
+            } catch (_: Exception) { /* Keep a dark placeholder when a provider cannot generate a thumbnail. */ }
+        }
     }
 
     // Match the app's existing dark-teal / aqua palette; controls should look native to the GUI,
     // not like newly added default Android buttons.
+    private fun circularToolBackground() = GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        setColor(Color.argb(150, 12, 14, 18))
+        setStroke(dp(1), Color.argb(105, 255, 255, 255))
+    }
+
+    private fun systemMusicVolumeLevel(): Float {
+        val audio = getSystemService(AUDIO_SERVICE) as AudioManager
+        val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        return audio.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / max.toFloat()
+    }
+
+    private fun setSystemMusicVolumeLevel(level: Float) {
+        val audio = getSystemService(AUDIO_SERVICE) as AudioManager
+        val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        val value = (level.coerceIn(0f, 1f) * max).toInt().coerceIn(0, max)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, value, 0)
+    }
+
     private fun panelBackground() = GradientDrawable().apply {
         setColor(Color.argb(224, 5, 20, 24))
         cornerRadius = dp(12).toFloat()
@@ -428,7 +613,7 @@ class NativeVideoPlayerActivity : Activity() {
         text = label; textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; maxLines = 1; includeFontPadding = false
         setPadding(4, 6, 4, 6); minWidth = 0
         isClickable = true; isFocusable = true
-        setOnClickListener { action(); showControls() }
+        setOnClickListener { action(); if (!locked) showControls() }
     }
 
     private fun tool(label: String, action: () -> Unit): TextView = TextView(this).apply {
@@ -443,27 +628,26 @@ class NativeVideoPlayerActivity : Activity() {
     }
     private fun timeLabel(value: String) = TextView(this).apply { text = value; setTextColor(Color.WHITE); textSize = 12f; setPadding(5, 0, 5, 0) }
     private fun setControlsLocked(value: Boolean) {
-        fun visit(view: View) {
-            if (view === lockButton) return
-            view.isEnabled = !value
-            if (view is android.view.ViewGroup) {
-                for (i in 0 until view.childCount) visit(view.getChildAt(i))
-            }
-        }
-        // Keep the lock button enabled so the user can always unlock the controls.
-        visit(controls)
-        visit(topBar)
+        // Hide all touchable controls while locked and expose one full-screen tap target
+        // so the user can unlock without needing to reach an invisible lock button.
+        controls.visibility = if (value) View.GONE else View.VISIBLE
+        topBar.visibility = if (value) View.GONE else View.VISIBLE
+        bottomToolsRow.visibility = if (value) View.GONE else View.VISIBLE
+        unlockOverlay.visibility = if (value) View.VISIBLE else View.GONE
+        lockButton.text = if (value) "🔓" else "🔒"
         lockButton.isEnabled = true
         lockButton.alpha = 1f
     }
     private fun toggleControls() {
-        if (controls.visibility == View.VISIBLE || topBar.visibility == View.VISIBLE) {
-            if (!locked) { controls.visibility = View.GONE; topBar.visibility = View.GONE; handler.removeCallbacks(hideControls) }
+        if (controls.visibility == View.VISIBLE || topBar.visibility == View.VISIBLE || bottomToolsRow.visibility == View.VISIBLE) {
+            if (!locked) { controls.visibility = View.GONE; topBar.visibility = View.GONE; bottomToolsRow.visibility = View.GONE; handler.removeCallbacks(hideControls) }
         } else showControls()
     }
     private fun showControls() {
+        if (locked) return
         controls.visibility = View.VISIBLE
         topBar.visibility = View.VISIBLE
+        bottomToolsRow.visibility = View.VISIBLE
         handler.removeCallbacks(hideControls)
         if (!locked) handler.postDelayed(hideControls, 5000)
     }
@@ -482,23 +666,18 @@ class NativeVideoPlayerActivity : Activity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun showVolumePicker() {
-        val p = controller
-        if (p == null) {
-            Toast.makeText(this, "Player is not ready yet", Toast.LENGTH_SHORT).show()
-            return
-        }
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(12), dp(22), dp(8))
         }
         val label = TextView(this).apply {
-            text = if (volumeMuted) "Volume: muted" else "Volume: ${(p.volume * 100).toInt()}%"
+            text = if (systemMusicVolumeLevel() <= 0f) "Volume: muted" else "Volume: ${(systemMusicVolumeLevel() * 100).toInt()}%"
             textSize = 14f
         }
         panel.addView(label)
         val slider = SeekBar(this).apply {
             max = 100
-            progress = if (volumeMuted) 0 else (p.volume * 100).toInt().coerceIn(0, 100)
+            progress = (systemMusicVolumeLevel() * 100).toInt().coerceIn(0, 100)
         }
         panel.addView(slider)
         val dialog = AlertDialog.Builder(this)
@@ -511,25 +690,24 @@ class NativeVideoPlayerActivity : Activity() {
             override fun onStartTrackingTouch(sb: SeekBar) {}
             override fun onProgressChanged(sb: SeekBar, value: Int, fromUser: Boolean) {
                 if (!fromUser) return
-                val current = controller ?: return
-                current.volume = value / 100f
+                setSystemMusicVolumeLevel(value / 100f)
                 volumeMuted = value == 0
-                volumeButton.text = if (volumeMuted) "🔇" else "🔊"
+                volumeButton.alpha = if (volumeMuted) 0.65f else 1f
                 label.text = if (volumeMuted) "Volume: muted" else "Volume: $value%"
             }
             override fun onStopTrackingTouch(sb: SeekBar) {}
         })
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
-                controller?.volume = 0f
+                setSystemMusicVolumeLevel(0f)
                 volumeMuted = true
-                volumeButton.text = "🔇"
+                volumeButton.alpha = 0.65f
                 slider.progress = 0
                 label.text = "Volume: muted"
             }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 if (slider.progress > 0) volumeMuted = false
-                volumeButton.text = if (volumeMuted) "🔇" else "🔊"
+                volumeButton.alpha = if (volumeMuted) 0.65f else 1f
                 dialog.dismiss()
                 showControls()
             }

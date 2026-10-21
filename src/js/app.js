@@ -55,10 +55,12 @@ window.addEventListener('message', async (event) => {
 });
 try {
   App.addListener('backButton', () => {
-    if (videoFrameBridge && document.getElementById('videoPlayer')?.classList.contains('active')) {
-      videoFrameBridge.contentWindow?.postMessage({ type: 'meraj-video-native-back' }, '*');
-    } else {
+    // NativeVideoPlayerActivity handles Back while video is open. Once it closes,
+    // return through the app's page stack; at the root, actually exit the app.
+    if (historyPages.length > 1) {
       goBack();
+    } else {
+      App.exitApp().catch(() => {});
     }
   }).catch(() => {});
 } catch (_) {}

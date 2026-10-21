@@ -317,6 +317,7 @@
       return;
     }
     state.index = (index + list.length) % list.length;
+    renderVideoPreviewThumbnails();
     const file = list[state.index];
     let videoUrl;
     if (file?.uri) {
@@ -476,11 +477,15 @@
     state.videoLocked = Boolean(locked);
     const lockButton = $("video-overlay-lock");
     lockButton.textContent = state.videoLocked ? "🔓" : "🔒";
-    lockButton.setAttribute("aria-label", state.videoLocked ? "Unlock controls" : "Lock controls");
-    lockButton.setAttribute("title", state.videoLocked ? "Unlock controls" : "Lock controls");
+    lockButton.setAttribute("aria-label", state.videoLocked ? "Locked — tap video to unlock" : "Lock controls");
+    lockButton.setAttribute("title", state.videoLocked ? "Locked — tap video to unlock" : "Lock controls");
     $("video-overlay-controls").classList.toggle("controls-locked", state.videoLocked);
+    $("video-frame").classList.toggle("controls-locked", state.videoLocked);
+    $("video-unlock-tap")?.classList.toggle("hidden", !state.videoLocked);
+    $("video-locked-badge")?.classList.toggle("hidden", !state.videoLocked);
     video.controls = false;
-    if (state.videoLocked && state.controlsTimer) clearTimeout(state.controlsTimer);
+    if (state.controlsTimer) { clearTimeout(state.controlsTimer); state.controlsTimer = null; }
+    if (state.videoLocked) $("video-overlay-controls").classList.add("hidden");
   }
   async function toggleVideoFullscreen() {
     try {
@@ -535,6 +540,46 @@
     state.files = queue;
     playIndex((idx - 1 + queue.length) % queue.length, true, queue);
   }
+
+  // Compact horizontal queue matching the standalone controls preview.
+  async function renderVideoPreviewThumbnails() {
+    const strip = $("video-preview-thumbnails");
+    if (!strip) return;
+    strip.replaceChildren();
+    if (state.mode !== "video" || !state.files.length) { strip.classList.add("hidden"); return; }
+    strip.classList.remove("hidden");
+    const snapshot = state.files.slice();
+    snapshot.forEach((file, i) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `video-preview-thumb${i === state.index ? " selected" : ""}`;
+      button.title = file.name || file.displayName || "Video";
+      button.setAttribute("aria-label", `Play ${button.title}`);
+      const label = document.createElement("span");
+      label.className = "thumb-label"; label.textContent = file.name || file.displayName || "Video";
+      button.appendChild(label);
+      if (file.uri) loadNativeThumbnail(button, file.uri);
+      else {
+        const cached = state.objectUrls.find(entry => entry.key === fileKey(file));
+        if (cached?.url) button.style.backgroundImage = `url("${cached.url}")`;
+      }
+      button.addEventListener("click", event => {
+        event.preventDefault(); event.stopPropagation();
+        const idx = state.files.findIndex(f => fileKey(f) === fileKey(file));
+        if (idx >= 0) playIndex(idx, true);
+        showVideoControls(true);
+      });
+      strip.appendChild(button);
+    });
+    const active = strip.children[state.index];
+    active?.scrollIntoView?.({block:"nearest", inline:"nearest", behavior:"smooth"});
+  }
+  $("video-overlay-share")?.addEventListener("click", () => $("share-video-app")?.click());
+  $("video-unlock-tap")?.addEventListener("click", event => {
+    event.preventDefault(); event.stopPropagation();
+    if (state.videoLocked) { setVideoLock(false); showVideoControls(true); }
+  });
+
   function renderVideoFolderStrip() {
     const strip = $("video-folder-strip");
     if (!strip || state.mode !== "video") return;
@@ -566,6 +611,7 @@
 
   function renderPlaylist() {
     const list = $("playlist");
+    renderVideoPreviewThumbnails();
     let shown = state.mode === "audio" ? currentAudioList() : state.files;
     if (state.mode === "video") {
       const q = state.videoSearch.trim().toLocaleLowerCase();
@@ -930,7 +976,7 @@
     if (state.controlsTimer) clearTimeout(state.controlsTimer);
     state.controlsTimer = null;
     if (state.videoLocked) {
-      controls.classList.remove("hidden");
+      controls.classList.add("hidden");
       return;
     }
     controls.classList.toggle("hidden", !show);
@@ -946,7 +992,7 @@
   let lastFrameTap = 0;
   videoFrame.addEventListener("click", e => {
     if (e.target.closest(".video-overlay-controls")) return;
-    if (state.videoLocked) return;
+    if (state.videoLocked) { $("video-unlock-tap")?.click(); return; }
     // A single tap anywhere on the video toggles controls; no accidental pause/scroll blocking.
     const controls = $("video-overlay-controls");
     showVideoControls(controls.classList.contains("hidden"));
