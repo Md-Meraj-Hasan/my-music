@@ -645,6 +645,12 @@
         : i === state.index;
       const isVideo = state.mode === "video";
       item.className = `playlist-item${active ? " active" : ""}${isVideo ? " video-library-card" : ""}`;
+      if (isVideo) {
+        item.dataset.videoFileKey = fileKey(file);
+        item.setAttribute("role", "button");
+        item.setAttribute("tabindex", "0");
+        item.setAttribute("aria-label", `Play video ${file.name || "Untitled video"}`);
+      }
 
       if (isVideo) {
         // Explicit inline layout avoids legacy MP3 CSS rules collapsing video card content.
@@ -719,9 +725,8 @@
         playBadge.className = "video-card-play";
         playBadge.textContent = "▶";
         item.appendChild(info);
-        item.addEventListener("click", e => {
-          if (!e.target.closest("button")) playIndex(state.files.findIndex(f => fileKey(f) === fileKey(file)), true);
-        });
+        // Video-card activation is delegated from the stable playlist container below.
+        // This avoids missed taps when cards are rebuilt after scanning/filtering.
       } else {
         item.append(button, info);
         const fav = document.createElement("button");
@@ -735,6 +740,33 @@
       list.appendChild(item);
     });
   }
+  // One delegated handler covers dynamically rebuilt native-video cards and touch taps.
+  // Resolve the item by its original content URI key instead of the filtered-list index.
+  const playlistContainer = $("playlist");
+  if (playlistContainer) {
+    playlistContainer.addEventListener("click", event => {
+      const card = event.target.closest(".video-library-card[data-video-file-key]");
+      if (!card || state.mode !== "video") return;
+      const index = state.files.findIndex(file => fileKey(file) === card.dataset.videoFileKey);
+      if (index < 0) {
+        updateScanMessage("Could not identify this video. Rescan the video library and try again.");
+        return;
+      }
+      card.classList.add("launching-video");
+      updateScanMessage(`Opening ${state.files[index].name || "video"}…`);
+      Promise.resolve(playIndex(index, true)).finally(() => {
+        card.classList.remove("launching-video");
+      });
+    });
+    playlistContainer.addEventListener("keydown", event => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const card = event.target.closest(".video-library-card[data-video-file-key]");
+      if (!card || state.mode !== "video") return;
+      event.preventDefault();
+      card.click();
+    });
+  }
+
   function toggleFavorite(file) {
     const key = fileKey(file);
     if (state.favorites.has(key)) state.favorites.delete(key); else state.favorites.add(key);

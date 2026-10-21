@@ -1002,3 +1002,7 @@ body.folders-view #player-screen .video-library-toolbar .library-tabs { flex:1 1
  #video-overlay-controls .video-overlay-actions #video-overlay-play { width:42px!important; height:42px!important; flex-basis:42px!important; font-size:23px!important; }
  .video-preview-thumb { flex-basis:76px!important; width:76px!important; height:44px!important; }
 }
+
+/* Visible feedback while a selected local video is handed to native Media3. */
+.video-library-card.launching-video { outline: 2px solid rgba(74, 224, 205, .95); outline-offset: 1px; filter: brightness(1.16); }
+.video-library-card[role="button"]:focus-visible { outline: 2px solid rgba(74, 224, 205, .95); outline-offset: 2px; }

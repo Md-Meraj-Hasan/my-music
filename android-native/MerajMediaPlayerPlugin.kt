@@ -72,10 +72,39 @@ class MerajMediaPlayerPlugin : Plugin() {
     }
 
     private fun withController(call: PluginCall, action: (MediaController) -> Unit) {
+        // The MediaSession connection is asynchronous. Do not reject a valid tap
+        // merely because the user selected a song before the controller finished connecting.
         mainHandler.post {
-            val c = controller
-            if (c == null) call.reject("Background media session is not ready. Please try again.")
-            else try { action(c) } catch (e: Exception) { call.reject(e.message ?: "Media operation failed") }
+            fun runAction(c: MediaController) {
+                try {
+                    controller = c
+                    action(c)
+                } catch (e: Exception) {
+                    android.util.Log.e("MerajMediaPlayer", "Native media action failed", e)
+                    call.reject(e.message ?: "Media operation failed", e)
+                }
+            }
+
+            val ready = controller
+            if (ready != null) {
+                runAction(ready)
+                return@post
+            }
+
+            val future = controllerFuture
+            if (future == null) {
+                call.reject("Background media session was not initialized. Reopen the app and try again.")
+                return@post
+            }
+            future.addListener({
+                try {
+                    val c = controller ?: future.get().also { controller = it }
+                    runAction(c)
+                } catch (e: Exception) {
+                    android.util.Log.e("MerajMediaPlayer", "Could not connect to background media session", e)
+                    call.reject("Could not connect to the playback service: ${e.cause?.message ?: e.message ?: "unknown error"}", e)
+                }
+            }, java.util.concurrent.Executor { command -> mainHandler.post { command.run() } })
         }
     }
 

@@ -40,8 +40,6 @@ class NativeVideoPlayerActivity : Activity() {
     private lateinit var controls: LinearLayout
     private lateinit var topBar: LinearLayout
     private lateinit var gestureIndicator: View
-    private lateinit var unlockOverlay: FrameLayout
-    private lateinit var lockedBadge: TextView
     private lateinit var playButton: ImageButton
     private lateinit var seekBar: SeekBar
     private lateinit var positionLabel: TextView
@@ -53,7 +51,13 @@ class NativeVideoPlayerActivity : Activity() {
     private lateinit var shareButton: TextView
     private lateinit var volumeButton: ImageButton
     private lateinit var bottomToolsRow: LinearLayout
+    private lateinit var middleControls: LinearLayout
+    private lateinit var seekRow: LinearLayout
+    private lateinit var utilityTools: LinearLayout
+    private lateinit var thumbScroll: android.widget.HorizontalScrollView
+    private lateinit var portraitBottomPanel: LinearLayout
     private lateinit var thumbnailStrip: LinearLayout
+    private var portraitLayoutActive = false
     private val thumbnailViews = mutableListOf<View>()
     private var queueUrisForThumbs: ArrayList<String> = arrayListOf()
     private var queueTitlesForThumbs: ArrayList<String> = arrayListOf()
@@ -85,7 +89,13 @@ class NativeVideoPlayerActivity : Activity() {
     private var activeSideGesture = 0 // 0=none, 1=brightness, 2=volume
     private var sideGestureAdjusted = false
     private val handler = Handler(Looper.getMainLooper())
-    private val hideControls = Runnable { if (!locked) { controls.visibility = View.GONE; topBar.visibility = View.GONE; bottomToolsRow.visibility = View.GONE } }
+    private val hideControls = Runnable { if (!locked) {
+        controls.visibility = View.GONE
+        topBar.visibility = View.GONE
+        bottomToolsRow.visibility = View.GONE
+        if (::middleControls.isInitialized) middleControls.visibility = View.GONE
+        if (::portraitBottomPanel.isInitialized) portraitBottomPanel.visibility = View.GONE
+    } }
     private val progress = object : Runnable {
         override fun run() {
             val p = controller
@@ -211,6 +221,7 @@ class NativeVideoPlayerActivity : Activity() {
         if (queueTitlesForThumbs.isEmpty()) queueTitlesForThumbs.add(videoTitle)
         buildControls()
         setContentView(root)
+        applyOrientationLayout()
         val token = SessionToken(this, ComponentName(this, MerajPlaybackService::class.java))
         val future = MediaController.Builder(this, token).buildAsync()
         controllerFuture = future
@@ -339,7 +350,8 @@ class NativeVideoPlayerActivity : Activity() {
 
         // Transparent, balanced control row: previous immediately left of the centered Play/Pause,
         // next immediately right. Remaining actions are distributed on both sides.
-        val middle = LinearLayout(this).apply { minimumHeight = dp(50); orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; weightSum = 2f }
+        middleControls = LinearLayout(this).apply { minimumHeight = dp(50); orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; weightSum = 2f }
+        val middle = middleControls
         fun makeIcon(icon: Int, action: () -> Unit): ImageButton = iconButton(icon, action).apply {
             background = circularToolBackground()
             setColorFilter(Color.WHITE)
@@ -390,7 +402,7 @@ class NativeVideoPlayerActivity : Activity() {
         middle.addView(playButton, 1, LinearLayout.LayoutParams(playSize, dp(48)))
         controls.addView(middle, LinearLayout.LayoutParams(-1, dp(50)))
 
-        val seekRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
+        seekRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
         positionLabel = timeLabel("00:00"); seekRow.addView(positionLabel)
         seekBar = SeekBar(this).apply {
             max = 1000
@@ -417,7 +429,7 @@ class NativeVideoPlayerActivity : Activity() {
             setPadding(dp(8), dp(2), dp(8), dp(4))
             background = null
         }
-        val utilityTools = LinearLayout(this).apply {
+        utilityTools = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
@@ -428,18 +440,13 @@ class NativeVideoPlayerActivity : Activity() {
             setPadding(dp(6), dp(6), dp(6), dp(6))
             layoutParams = LinearLayout.LayoutParams(dp(34), dp(34)).apply { rightMargin = dp(3) }
         }
-        lockButton = compactTool("🔒") {
+        lockButton = compactTool("♙") {
             locked = !locked
-            lockButton.text = if (locked) "🔓" else "🔒"
+            lockButton.text = if (locked) "🔒" else "♙"
             lockButton.contentDescription = if (locked) "Unlock video controls" else "Lock video controls"
             setControlsLocked(locked)
-            if (locked) {
-                handler.removeCallbacks(hideControls)
-                Toast.makeText(this, "Controls locked — tap video to unlock", Toast.LENGTH_SHORT).show()
-            } else {
-                showControls()
-                Toast.makeText(this, "Controls unlocked", Toast.LENGTH_SHORT).show()
-            }
+            if (locked) { handler.removeCallbacks(hideControls); Toast.makeText(this, "Controls locked — tap lock to unlock", Toast.LENGTH_SHORT).show() }
+            else { showControls(); Toast.makeText(this, "Controls unlocked", Toast.LENGTH_SHORT).show() }
         }.apply {
             textSize = 21f; background = circularToolBackground(); setTextColor(Color.WHITE)
             layoutParams = LinearLayout.LayoutParams(dp(34), dp(34)).apply { rightMargin = dp(3) }
@@ -453,14 +460,14 @@ class NativeVideoPlayerActivity : Activity() {
         utilityTools.addView(rotateSmall)
         bottomToolsRow.addView(utilityTools, LinearLayout.LayoutParams(-2, dp(42)))
 
-        val thumbScroll = android.widget.HorizontalScrollView(this).apply {
+        thumbScroll = android.widget.HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             clipToPadding = false
             setPadding(dp(3), 0, dp(2), 0)
         }
         thumbnailStrip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        thumbScroll.addView(thumbnailStrip, FrameLayout.LayoutParams(-2, dp(48)))
+        thumbScroll.addView(thumbnailStrip, android.widget.HorizontalScrollView.LayoutParams(-2, dp(48)))
         bottomToolsRow.addView(thumbScroll, LinearLayout.LayoutParams(0, dp(48), 1f))
         buildVideoThumbnails()
 
@@ -472,35 +479,83 @@ class NativeVideoPlayerActivity : Activity() {
         root.addView(controls, mainControlsParams)
         controls.setOnClickListener { showControls() }
         bottomToolsRow.setOnClickListener { showControls() }
+    }
 
-        // Native equivalent of the approved browser preview's tap-to-unlock layer.
-        // It intercepts touches only while locked; the player and controls work normally otherwise.
-        unlockOverlay = FrameLayout(this).apply {
-            visibility = View.GONE
-            isClickable = true
-            isFocusable = true
-            setOnClickListener {
-                locked = false
-                lockButton.text = "🔒"
-                lockButton.contentDescription = "Lock video controls"
-                setControlsLocked(false)
-                showControls()
-                Toast.makeText(this@NativeVideoPlayerActivity, "Controls unlocked", Toast.LENGTH_SHORT).show()
+    /** Reflow only the portrait layout. The existing landscape hierarchy and dimensions are preserved. */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::root.isInitialized && ::controls.isInitialized) applyOrientationLayout()
+    }
+
+    private fun detachFromParent(view: View) {
+        (view.parent as? android.view.ViewGroup)?.removeView(view)
+    }
+
+    private fun applyOrientationLayout() {
+        val portrait = resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        if (portrait == portraitLayoutActive && ::portraitBottomPanel.isInitialized) return
+        portraitLayoutActive = portrait
+
+        if (!::portraitBottomPanel.isInitialized) {
+            portraitBottomPanel = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(dp(7), dp(3), dp(7), dp(4))
+                background = null
             }
         }
-        lockedBadge = TextView(this).apply {
-            text = "🔒  Tap anywhere to unlock"
-            textSize = 14f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            setPadding(dp(14), dp(9), dp(14), dp(9))
-            background = GradientDrawable().apply {
-                setColor(Color.argb(155, 0, 0, 0))
-                cornerRadius = dp(22).toFloat()
+
+        if (portrait) {
+            // The large pause/play button overlays the video; tool row, seekbar and
+            // full-width thumbnails are stacked at the bottom as in the reference.
+            detachFromParent(middleControls)
+            detachFromParent(seekRow)
+            detachFromParent(utilityTools)
+            detachFromParent(thumbScroll)
+            portraitBottomPanel.removeAllViews()
+            utilityTools.gravity = Gravity.CENTER_VERTICAL
+            utilityTools.layoutParams = LinearLayout.LayoutParams(-1, dp(46))
+            portraitBottomPanel.addView(utilityTools)
+            seekRow.setPadding(dp(2), 0, dp(2), 0)
+            portraitBottomPanel.addView(seekRow, LinearLayout.LayoutParams(-1, dp(34)))
+            thumbScroll.setPadding(dp(1), dp(2), dp(1), dp(2))
+            detachFromParent(thumbnailStrip)
+            thumbScroll.addView(thumbnailStrip, android.widget.HorizontalScrollView.LayoutParams(-2, dp(88)))
+            portraitBottomPanel.addView(thumbScroll, LinearLayout.LayoutParams(-1, dp(96)))
+            if (portraitBottomPanel.parent == null) {
+                root.addView(portraitBottomPanel, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
             }
+            val centerParams = FrameLayout.LayoutParams(-1, dp(58), Gravity.CENTER)
+            if (middleControls.parent == null) root.addView(middleControls, centerParams) else middleControls.layoutParams = centerParams
+            // Avoid an empty legacy landscape panel intercepting touches.
+            controls.visibility = View.GONE
+            bottomToolsRow.visibility = View.GONE
+            middleControls.visibility = View.VISIBLE
+            portraitBottomPanel.visibility = View.VISIBLE
+            thumbnailStrip.post { buildVideoThumbnails() }
+        } else {
+            detachFromParent(middleControls)
+            detachFromParent(seekRow)
+            detachFromParent(utilityTools)
+            detachFromParent(thumbScroll)
+            detachFromParent(portraitBottomPanel)
+            controls.removeAllViews()
+            controls.addView(middleControls, LinearLayout.LayoutParams(-1, dp(50)))
+            controls.addView(seekRow)
+            bottomToolsRow.removeAllViews()
+            bottomToolsRow.addView(utilityTools, LinearLayout.LayoutParams(-2, dp(42)))
+            thumbScroll.setPadding(dp(3), 0, dp(2), 0)
+            detachFromParent(thumbnailStrip)
+            thumbScroll.addView(thumbnailStrip, android.widget.HorizontalScrollView.LayoutParams(-2, dp(48)))
+            bottomToolsRow.addView(thumbScroll, LinearLayout.LayoutParams(0, dp(48), 1f))
+            controls.visibility = View.VISIBLE
+            bottomToolsRow.visibility = View.VISIBLE
+            middleControls.visibility = View.VISIBLE
+            portraitBottomPanel.visibility = View.GONE
+            thumbnailStrip.post { buildVideoThumbnails() }
         }
-        unlockOverlay.addView(lockedBadge, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
-        root.addView(unlockOverlay, FrameLayout.LayoutParams(-1, -1))
+        if (locked) setControlsLocked(true)
+        showControls()
     }
 
     private fun buildVideoThumbnails() {
@@ -558,11 +613,14 @@ class NativeVideoPlayerActivity : Activity() {
                     setStroke(dp(2), Color.rgb(74, 224, 205))
                 }
             }
-            thumbnailStrip.addView(item, LinearLayout.LayoutParams(dp(76), dp(44)).apply { rightMargin = dp(7) })
+            val isPortrait = resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val thumbWidth = if (isPortrait) dp(150) else dp(76)
+            val thumbHeight = if (isPortrait) dp(84) else dp(44)
+            thumbnailStrip.addView(item, LinearLayout.LayoutParams(thumbWidth, thumbHeight).apply { rightMargin = dp(if (isPortrait) 10 else 7) })
             thumbnailViews.add(item)
             try {
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                    val bitmap = contentResolver.loadThumbnail(uri, android.util.Size(dp(76), dp(44)), null)
+                    val bitmap = contentResolver.loadThumbnail(uri, android.util.Size(dp(if (resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE) 150 else 76), dp(if (resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE) 84 else 44)), null)
                     image.setImageBitmap(bitmap)
                 } else {
                     val retriever = android.media.MediaMetadataRetriever()
@@ -613,7 +671,7 @@ class NativeVideoPlayerActivity : Activity() {
         text = label; textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; maxLines = 1; includeFontPadding = false
         setPadding(4, 6, 4, 6); minWidth = 0
         isClickable = true; isFocusable = true
-        setOnClickListener { action(); if (!locked) showControls() }
+        setOnClickListener { action(); showControls() }
     }
 
     private fun tool(label: String, action: () -> Unit): TextView = TextView(this).apply {
@@ -628,26 +686,46 @@ class NativeVideoPlayerActivity : Activity() {
     }
     private fun timeLabel(value: String) = TextView(this).apply { text = value; setTextColor(Color.WHITE); textSize = 12f; setPadding(5, 0, 5, 0) }
     private fun setControlsLocked(value: Boolean) {
-        // Hide all touchable controls while locked and expose one full-screen tap target
-        // so the user can unlock without needing to reach an invisible lock button.
-        controls.visibility = if (value) View.GONE else View.VISIBLE
-        topBar.visibility = if (value) View.GONE else View.VISIBLE
-        bottomToolsRow.visibility = if (value) View.GONE else View.VISIBLE
-        unlockOverlay.visibility = if (value) View.VISIBLE else View.GONE
-        lockButton.text = if (value) "🔓" else "🔒"
+        fun visit(view: View) {
+            if (view === lockButton) return
+            view.isEnabled = !value
+            if (view is android.view.ViewGroup) {
+                for (i in 0 until view.childCount) visit(view.getChildAt(i))
+            }
+        }
+        // Keep the lock button enabled so the user can always unlock the controls.
+        visit(controls)
+        visit(topBar)
+        visit(bottomToolsRow)
+        if (::middleControls.isInitialized) visit(middleControls)
+        if (::portraitBottomPanel.isInitialized) visit(portraitBottomPanel)
         lockButton.isEnabled = true
         lockButton.alpha = 1f
     }
     private fun toggleControls() {
-        if (controls.visibility == View.VISIBLE || topBar.visibility == View.VISIBLE || bottomToolsRow.visibility == View.VISIBLE) {
-            if (!locked) { controls.visibility = View.GONE; topBar.visibility = View.GONE; bottomToolsRow.visibility = View.GONE; handler.removeCallbacks(hideControls) }
+        val anyVisible = controls.visibility == View.VISIBLE || topBar.visibility == View.VISIBLE || bottomToolsRow.visibility == View.VISIBLE || (if (::middleControls.isInitialized) middleControls.visibility == View.VISIBLE else false) || (if (::portraitBottomPanel.isInitialized) portraitBottomPanel.visibility == View.VISIBLE else false)
+        if (anyVisible) {
+            if (!locked) {
+                controls.visibility = View.GONE; topBar.visibility = View.GONE; bottomToolsRow.visibility = View.GONE
+                if (::middleControls.isInitialized) middleControls.visibility = View.GONE
+                if (::portraitBottomPanel.isInitialized) portraitBottomPanel.visibility = View.GONE
+                handler.removeCallbacks(hideControls)
+            }
         } else showControls()
     }
     private fun showControls() {
-        if (locked) return
-        controls.visibility = View.VISIBLE
         topBar.visibility = View.VISIBLE
-        bottomToolsRow.visibility = View.VISIBLE
+        if (portraitLayoutActive) {
+            controls.visibility = View.GONE
+            bottomToolsRow.visibility = View.GONE
+            middleControls.visibility = View.VISIBLE
+            portraitBottomPanel.visibility = View.VISIBLE
+        } else {
+            controls.visibility = View.VISIBLE
+            bottomToolsRow.visibility = View.VISIBLE
+            middleControls.visibility = View.VISIBLE
+            portraitBottomPanel.visibility = View.GONE
+        }
         handler.removeCallbacks(hideControls)
         if (!locked) handler.postDelayed(hideControls, 5000)
     }

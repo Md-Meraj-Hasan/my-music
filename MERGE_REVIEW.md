@@ -26,9 +26,3 @@
 - Lock now hides the overlay and blocks controls; tapping the video unlocks.
 - The share control reuses the existing selected-video native share handler.
 - This is a source ZIP update. A Gradle/GitHub Actions APK build and physical-device validation have not been run here.
-
-## Verified native Lock fix (2026-10-21)
-- Confirmed Android MediaStore video selection calls `MediaLibraryScannerPlugin.launchVideo`, which opens `NativeVideoPlayerActivity` and uses a `MediaController` attached to `MerajPlaybackService`; the browser `<video>` overlay is not the Android direct-playback surface.
-- Fixed the actual native Activity lock behavior to match the approved preview: locking hides top, centre, seek, and bottom/thumbnail controls; a full-screen tap-to-unlock overlay appears; tapping it restores controls and resets the lock icon.
-- Fixed the shared compact-control click wrapper so it cannot re-show controls immediately after locking.
-- Validation completed: JavaScript syntax checks for both web app scripts and integration scripts, JSON parse checks, and ZIP integrity. Android Gradle build/device test not completed in this environment; npm dependency install timed out, so no APK build result is claimed.
