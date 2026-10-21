@@ -460,7 +460,7 @@ class NativeVideoPlayerActivity : Activity() {
             setPadding(dp(3), 0, dp(2), 0)
         }
         thumbnailStrip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        thumbScroll.addView(thumbnailStrip, android.widget.HorizontalScrollView.LayoutParams(-2, dp(48)))
+        thumbScroll.addView(thumbnailStrip, FrameLayout.LayoutParams(-2, dp(48)))
         bottomToolsRow.addView(thumbScroll, LinearLayout.LayoutParams(0, dp(48), 1f))
         buildVideoThumbnails()
 
