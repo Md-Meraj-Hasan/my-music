@@ -78,19 +78,6 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Set up Python for Chaquopy
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - name: Verify Python version for Chaquopy
-        shell: bash
-        run: |
-          set -euo pipefail
-          python --version
-          python3 --version
-          python -c "import sys; assert sys.version_info[:2] == (3, 10), sys.version"
-
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -112,14 +99,28 @@ jobs:
       - name: Verify built HTML and local assets
         run: node scripts/verify-web-assets.cjs dist
 
-      - name: Generate or sync Android project
+      - name: Regenerate a clean Capacitor Android project
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -d android ]; then
-            npx cap add android
-          else
-            npx cap sync android
+          # The repository's committed android/ folder is an old Jupyter/Chaquopy
+          # project (package com.meraj.jupyternotebook), not a Capacitor project.
+          # Reusing it leaves out the :capacitor-android project dependency, so
+          # all com.getcapacitor.* Kotlin imports fail to resolve. Generate the
+          # Android wrapper from the current package.json and capacitor.config.json.
+          rm -rf android
+          npx cap add android
+          npx cap sync android
+
+          if ! grep -q "capacitor-android" android/settings.gradle; then
+            echo "ERROR: Generated Android project is missing the Capacitor Android module."
+            cat android/settings.gradle
+            exit 1
+          fi
+          if ! grep -q "capacitor-android" android/app/build.gradle; then
+            echo "ERROR: App Gradle file does not reference the Capacitor Android module."
+            cat android/app/build.gradle
+            exit 1
           fi
 
       - name: Integrate native media permissions and scanner
