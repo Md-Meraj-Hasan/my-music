@@ -129,6 +129,34 @@ jobs:
             exit 1
           fi
 
+      - name: Align Java and Kotlin JVM targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_GRADLE="android/app/build.gradle"
+          test -f "$APP_GRADLE"
+          # Capacitor/AGP may configure Java for JVM 21 while Kotlin defaults to 17.
+          # Explicitly align both compilers before native media integration/build.
+          cat >> "$APP_GRADLE" <<'GRADLE'
+
+          // Keep Java and Kotlin bytecode targets aligned for the GitHub Actions JDK 21.
+          android {
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_21
+                  targetCompatibility JavaVersion.VERSION_21
+              }
+          }
+
+          tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+              kotlinOptions {
+                  jvmTarget = "21"
+              }
+          }
+          GRADLE
+          echo "===== JVM TARGET CONFIGURATION ====="
+          tail -n 22 "$APP_GRADLE"
+          grep -q 'jvmTarget = "21"' "$APP_GRADLE"
+
       - name: Integrate native media permissions and scanner
         run: node scripts/integrate-native-media.cjs
 
