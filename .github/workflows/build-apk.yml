@@ -95,7 +95,7 @@ jobs:
         run: node scripts/verify-web-assets.cjs dist
 
       - name: Generate Android project
-        run: npx cap add android
+        run: npx cap sync android
 
       - name: Integrate native media permissions and scanner
         run: node scripts/integrate-native-media.cjs
