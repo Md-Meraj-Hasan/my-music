@@ -11,3 +11,7 @@ Run `npm install` then `npm run start`. Browser security requires selecting loca
 
 ## Android build
 GitHub Actions builds the debug APK. The native integration script registers media plugins and Media3 dependencies; physical-device testing is still required for Android permissions, codec support and orientation behavior.
+
+
+### Gradle wrapper recovery (Review 6)
+The GitHub Actions workflow now provisions Gradle 8.11.1 and generates `android/gradlew` only if the Capacitor-generated Android project does not contain it. It then verifies the wrapper exists before running `assembleDebug`. This avoids the previous immediate `chmod: cannot access 'gradlew'` failure while retaining the existing Android project.
