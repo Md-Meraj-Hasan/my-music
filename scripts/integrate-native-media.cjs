@@ -20,8 +20,16 @@ function walk(dir, predicate, out = []) {
 
 if (!fs.existsSync(androidRoot)) throw new Error('Android project not found. Run npx cap add android first.');
 const settingsGradle = path.join(androidRoot, 'settings.gradle');
-if (fs.existsSync(settingsGradle) && !fs.readFileSync(settingsGradle, 'utf8').includes('capacitor-android')) {
-  throw new Error('The Android folder is not a correctly generated Capacitor project: :capacitor-android is missing from settings.gradle. Delete android/ and run npx cap add android.');
+const capacitorSettingsGradle = path.join(androidRoot, 'capacitor.settings.gradle');
+// Capacitor 7's generated settings.gradle applies capacitor.settings.gradle;
+// the :capacitor-android include may live in that applied file rather than the
+// top-level settings.gradle. Check the combined configuration.
+const settingsText = [
+  fs.existsSync(settingsGradle) ? fs.readFileSync(settingsGradle, 'utf8') : '',
+  fs.existsSync(capacitorSettingsGradle) ? fs.readFileSync(capacitorSettingsGradle, 'utf8') : ''
+].join('\\n');
+if (fs.existsSync(settingsGradle) && !settingsText.includes('capacitor-android')) {
+  throw new Error('The Android folder is not a correctly generated Capacitor project: :capacitor-android is missing from settings.gradle and capacitor.settings.gradle. Delete android/ and run npx cap add android.');
 }
 if (!fs.existsSync(manifest)) throw new Error(`AndroidManifest.xml not found at ${manifest}`);
 

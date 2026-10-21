@@ -112,9 +112,15 @@ jobs:
           npx cap add android
           npx cap sync android
 
-          if ! grep -q "capacitor-android" android/settings.gradle; then
-            echo "ERROR: Generated Android project is missing the Capacitor Android module."
+          # Capacitor 7 places the module include in capacitor.settings.gradle,
+          # which is applied by settings.gradle. Check both files rather than
+          # requiring the string to appear directly in settings.gradle.
+          if ! grep -q "capacitor-android" android/settings.gradle android/capacitor.settings.gradle 2>/dev/null; then
+            echo "ERROR: Generated Android project is missing the Capacitor Android module reference."
+            echo "===== android/settings.gradle ====="
             cat android/settings.gradle
+            echo "===== android/capacitor.settings.gradle ====="
+            if [ -f android/capacitor.settings.gradle ]; then cat android/capacitor.settings.gradle; else echo "File not found"; fi
             exit 1
           fi
           if ! grep -q "capacitor-android" android/app/build.gradle; then
