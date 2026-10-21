@@ -135,21 +135,31 @@ function ensureKotlinGradlePlugin() {
 ensureKotlinGradlePlugin();
 
 const appGradle = path.join(appRoot, 'build.gradle');
-let gradleText = fs.readFileSync(appGradle, 'utf8');
-if (!gradleText.includes('androidx.media3:media3-exoplayer')) {
-  if (!/dependencies\s*\{/.test(gradleText)) throw new Error('Could not find dependencies block in android/app/build.gradle');
-  gradleText = gradleText.replace(/dependencies\s*\{/, match => `${match}\n    implementation 'androidx.media3:media3-exoplayer:1.5.1'\n    implementation 'androidx.media3:media3-session:1.5.1'`);
-  fs.writeFileSync(appGradle, gradleText);
-} else if (!gradleText.includes('androidx.media3:media3-session')) {
-  gradleText = gradleText.replace(/dependencies\s*\{/, match => `${match}\n    implementation 'androidx.media3:media3-session:1.5.1'`);
-  fs.writeFileSync(appGradle, gradleText);
+const appGradleKts = path.join(appRoot, 'build.gradle.kts');
+const gradleFile = fs.existsSync(appGradle) ? appGradle : appGradleKts;
+if (!fs.existsSync(gradleFile)) throw new Error('Could not find android/app/build.gradle or build.gradle.kts');
+let gradleText = fs.readFileSync(gradleFile, 'utf8');
+const isKotlinDsl = gradleFile.endsWith('.kts');
+const depBlock = isKotlinDsl
+  ? `dependencies {\n    implementation("androidx.media3:media3-exoplayer:1.5.1")\n    implementation("androidx.media3:media3-session:1.5.1")\n    implementation("androidx.media3:media3-ui:1.5.1")\n}`
+  : `dependencies {\n    implementation 'androidx.media3:media3-exoplayer:1.5.1'\n    implementation 'androidx.media3:media3-session:1.5.1'\n    implementation 'androidx.media3:media3-ui:1.5.1'\n}`;
+const depLines = [
+  ['androidx.media3:media3-exoplayer', isKotlinDsl ? '    implementation("androidx.media3:media3-exoplayer:1.5.1")' : "    implementation 'androidx.media3:media3-exoplayer:1.5.1'"],
+  ['androidx.media3:media3-session', isKotlinDsl ? '    implementation("androidx.media3:media3-session:1.5.1")' : "    implementation 'androidx.media3:media3-session:1.5.1'"],
+  ['androidx.media3:media3-ui', isKotlinDsl ? '    implementation("androidx.media3:media3-ui:1.5.1")' : "    implementation 'androidx.media3:media3-ui:1.5.1'"]
+];
+const hasDependenciesBlock = /\bdependencies\s*\{/.test(gradleText);
+if (!hasDependenciesBlock) {
+  gradleText = gradleText.trimEnd() + '\n\n' + depBlock + '\n';
+} else {
+  for (const [coordinate, line] of depLines) {
+    if (!gradleText.includes(coordinate)) {
+      gradleText = gradleText.replace(/\bdependencies\s*\{/, match => `${match}\n${line}`);
+    }
+  }
 }
+fs.writeFileSync(gradleFile, gradleText);
 
-
-if (!gradleText.includes('androidx.media3:media3-ui')) {
-  gradleText = gradleText.replace(/dependencies\s*\{/, match => `${match}\n    implementation 'androidx.media3:media3-ui:1.5.1'`);
-  fs.writeFileSync(appGradle, gradleText);
-}
 
 // Register the MediaSessionService and foreground playback permissions.
 xml = fs.readFileSync(manifest, 'utf8');

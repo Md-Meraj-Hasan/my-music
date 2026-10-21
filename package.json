@@ -6,7 +6,7 @@
   "scripts": {
     "start": "vite --host 0.0.0.0",
     "build": "vite build && node scripts/verify-web-assets.cjs",
-    "android:build": "npm run build && npx cap add android && node scripts/strip-internet-permission.cjs && npx cap sync android && node scripts/strip-internet-permission.cjs && cd android && gradlew.bat assembleDebug",
+    "android:build": "npm run build && (test -d android || npx cap add android) && node scripts/integrate-native-media.cjs && node scripts/strip-internet-permission.cjs && npx cap sync android && node scripts/strip-internet-permission.cjs && cd android && gradlew.bat assembleDebug",
     "android:sync": "npx cap sync android"
   },
   "dependencies": {
