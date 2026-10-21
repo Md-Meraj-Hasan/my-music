@@ -116,29 +116,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          # The repository currently contains an old Jupyter/Chaquopy Android
-          # project, not a Capacitor Android project. Reuse android/ only when
-          # Capacitor's generated settings file and Android module are present.
-          if [ -d android ] && { \
-            [ ! -f android/capacitor.settings.gradle ] || \
-            ! grep -q "capacitor-android" android/capacitor.settings.gradle; \
-          }; then
-            echo "Existing android/ is not a valid Capacitor project; removing stale Android project."
-            rm -rf android
-          fi
-
           if [ ! -d android ]; then
             npx cap add android
           else
             npx cap sync android
-          fi
-
-          # Fail early if Capacitor's native Android module was not generated.
-          if [ ! -f android/capacitor.settings.gradle ] || ! grep -q "capacitor-android" android/capacitor.settings.gradle; then
-            echo "ERROR: Capacitor Android module is missing after cap add/sync."
-            cat android/settings.gradle
-            exit 1
           fi
 
       - name: Integrate native media permissions and scanner

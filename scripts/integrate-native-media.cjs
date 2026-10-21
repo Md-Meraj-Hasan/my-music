@@ -134,26 +134,28 @@ function ensureKotlinGradlePlugin() {
 
 ensureKotlinGradlePlugin();
 
-// Keep Kotlin bytecode target aligned with the Java compiler target used by
-// the generated Capacitor Android project (Java 17). Without this, newer
-// Kotlin Gradle plugins may default Kotlin compilation to JVM 21 while javac
-// remains at 17, causing compileDebugKotlin target-validation failure.
-function ensureKotlinJvmTarget17() {
+// Match Kotlin bytecode to the Java compiler target reported by the Android build.
+// The current Capacitor/Android build compiles Java for JVM 21; keeping Kotlin at
+// 17 triggers Gradle's inconsistent JVM-target validation failure.
+function ensureKotlinJvmTarget21() {
   const appGradle = path.join(appRoot, 'build.gradle');
   const appGradleKts = path.join(appRoot, 'build.gradle.kts');
   const file = fs.existsSync(appGradle) ? appGradle : appGradleKts;
   if (!fs.existsSync(file)) throw new Error('Cannot set Kotlin JVM target: app Gradle file is missing.');
   let text = fs.readFileSync(file, 'utf8');
-  const marker = '// MERAJ_KOTLIN_JVM_TARGET_17';
+
+  // Remove the previous generated JVM-17 block if this script ran before.
+  text = text.replace(/\n?\s*\/\/ MERAJ_KOTLIN_JVM_TARGET_17\s*\ntasks\.withType(?:<org\.jetbrains\.kotlin\.gradle\.tasks\.KotlinCompile>|\(org\.jetbrains\.kotlin\.gradle\.tasks\.KotlinCompile\))\.configureEach\s*\{[\s\S]*?\n\}\s*/g, '\n');
+  const marker = '// MERAJ_KOTLIN_JVM_TARGET_21';
   if (text.includes(marker)) return;
   if (file.endsWith('.kts')) {
-    text += `\n\n${marker}\ntasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {\n    kotlinOptions.jvmTarget = \"17\"\n}\n`;
+    text += `\n\n${marker}\ntasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {\n    kotlinOptions.jvmTarget = "21"\n}\n`;
   } else {
-    text += `\n\n${marker}\ntasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {\n    kotlinOptions {\n        jvmTarget = '17'\n    }\n}\n`;
+    text += `\n\n${marker}\ntasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {\n    kotlinOptions {\n        jvmTarget = '21'\n    }\n}\n`;
   }
   fs.writeFileSync(file, text);
 }
-ensureKotlinJvmTarget17();
+ensureKotlinJvmTarget21();
 
 const appGradle = path.join(appRoot, 'build.gradle');
 const appGradleKts = path.join(appRoot, 'build.gradle.kts');
