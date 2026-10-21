@@ -78,6 +78,19 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Set up Python for Chaquopy
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Verify Python version for Chaquopy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python --version
+          python3 --version
+          python -c "import sys; assert sys.version_info[:2] == (3, 10), sys.version"
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:

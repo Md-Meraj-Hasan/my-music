@@ -467,7 +467,7 @@ class NativeVideoPlayerActivity : Activity() {
             setPadding(dp(3), 0, dp(2), 0)
         }
         thumbnailStrip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        thumbScroll.addView(thumbnailStrip, android.widget.HorizontalScrollView.LayoutParams(-2, dp(48)))
+        thumbScroll.addView(thumbnailStrip, android.view.ViewGroup.LayoutParams(-2, dp(48)))
         bottomToolsRow.addView(thumbScroll, LinearLayout.LayoutParams(0, dp(48), 1f))
         buildVideoThumbnails()
 
@@ -520,7 +520,7 @@ class NativeVideoPlayerActivity : Activity() {
             portraitBottomPanel.addView(seekRow, LinearLayout.LayoutParams(-1, dp(34)))
             thumbScroll.setPadding(dp(1), dp(2), dp(1), dp(2))
             detachFromParent(thumbnailStrip)
-            thumbScroll.addView(thumbnailStrip, android.widget.HorizontalScrollView.LayoutParams(-2, dp(88)))
+            thumbScroll.addView(thumbnailStrip, android.view.ViewGroup.LayoutParams(-2, dp(88)))
             portraitBottomPanel.addView(thumbScroll, LinearLayout.LayoutParams(-1, dp(96)))
             if (portraitBottomPanel.parent == null) {
                 root.addView(portraitBottomPanel, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
@@ -546,7 +546,7 @@ class NativeVideoPlayerActivity : Activity() {
             bottomToolsRow.addView(utilityTools, LinearLayout.LayoutParams(-2, dp(42)))
             thumbScroll.setPadding(dp(3), 0, dp(2), 0)
             detachFromParent(thumbnailStrip)
-            thumbScroll.addView(thumbnailStrip, android.widget.HorizontalScrollView.LayoutParams(-2, dp(48)))
+            thumbScroll.addView(thumbnailStrip, android.view.ViewGroup.LayoutParams(-2, dp(48)))
             bottomToolsRow.addView(thumbScroll, LinearLayout.LayoutParams(0, dp(48), 1f))
             controls.visibility = View.VISIBLE
             bottomToolsRow.visibility = View.VISIBLE
